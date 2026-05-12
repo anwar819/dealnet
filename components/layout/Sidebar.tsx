@@ -133,7 +133,7 @@ export default function Sidebar({
           open ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        <div className="flex h-full flex-col justify-between p-5">
+        <div className="flex h-full max-h-screen flex-col justify-between overflow-y-auto p-5">
           <div>
             <div className="mb-5 rounded-2xl bg-slate-900 p-4 text-center">
               <div className="mb-2 flex justify-center">
