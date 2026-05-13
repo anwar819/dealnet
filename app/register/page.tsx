@@ -2,9 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
-import { auth, db } from "../../lib/firebase";
+import { supabase } from "../../lib/supabase";
 
 function RegisterContent() {
   const router = useRouter();
@@ -35,42 +33,68 @@ function RegisterContent() {
     try {
       setLoading(true);
 
-      const result = await createUserWithEmailAndPassword(
-        auth,
+      const { data, error } = await supabase.auth.signUp({
         email,
-        password
-      );
-
-      await setDoc(doc(db, "users", result.user.uid), {
-        uid: result.user.uid,
-        firstName,
-        lastName,
-        phone,
-        email,
-        isAdmin: false,
-        isBlocked: false,
-        isVerified: false,
-        rating: 0,
-        totalSales: 0,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/login?redirect=${redirect}${
+            action ? `&action=${action}` : ""
+          }`,
+          data: {
+            firstName,
+            lastName,
+            phone,
+            role: "user",
+            isAdmin: false,
+            isVerified: false,
+          },
+        },
       });
 
-      if (action === "chat") {
-        router.push(`${redirect}?action=chat`);
-      } else {
-        router.push(redirect);
+      if (error) {
+        console.error(error);
+        alert(error.message);
+        return;
       }
-    } catch (error: any) {
-      console.error(error);
 
-      if (error.code === "auth/email-already-in-use") {
-        alert("هذا البريد مستخدم مسبقًا");
-      } else if (error.code === "auth/invalid-email") {
-        alert("البريد الإلكتروني غير صحيح");
-      } else {
-        alert("حدث خطأ أثناء إنشاء الحساب");
+      const user = data.user;
+
+      if (!user) {
+        alert("فشل إنشاء الحساب");
+        return;
       }
+
+      const { error: insertError } = await supabase.from("users").insert([
+        {
+          id: user.id,
+          firstName,
+          lastName,
+          phone,
+          email,
+          isAdmin: false,
+          isBlocked: false,
+          isVerified: false,
+          rating: 0,
+          totalSales: 0,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        },
+      ]);
+
+      if (insertError) {
+        console.error(insertError);
+        alert("تم إنشاء الحساب، لكن فشل حفظ بيانات المستخدم");
+        return;
+      }
+
+      alert("تم إنشاء الحساب. يرجى فتح بريدك الإلكتروني لتأكيد الحساب.");
+
+      router.push(
+        `/login?redirect=${redirect}${action ? `&action=${action}` : ""}`
+      );
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء إنشاء الحساب");
     } finally {
       setLoading(false);
     }
@@ -79,9 +103,7 @@ function RegisterContent() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
       <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
-        <h1 className="mb-6 text-center text-3xl font-black">
-          إنشاء حساب
-        </h1>
+        <h1 className="mb-6 text-center text-3xl font-black">إنشاء حساب</h1>
 
         <input
           value={firstName}

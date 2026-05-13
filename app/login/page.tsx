@@ -2,8 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../../lib/firebase";
+import { supabase } from "../../lib/supabase";
 
 function LoginContent() {
   const router = useRouter();
@@ -15,6 +14,8 @@ function LoginContent() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  const [loading, setLoading] = useState(false);
+
   const login = async () => {
     if (!email || !password) {
       alert("يرجى إدخال البريد وكلمة المرور");
@@ -22,7 +23,30 @@ function LoginContent() {
     }
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      setLoading(true);
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error || !data.user) {
+        console.error(error);
+        alert("بيانات الدخول غير صحيحة أو البريد غير موثق");
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("users")
+        .select("isBlocked")
+        .eq("id", data.user.id)
+        .single();
+
+      if (profile?.isBlocked) {
+        await supabase.auth.signOut();
+        alert("تم حظر هذا الحساب من قبل الإدارة");
+        return;
+      }
 
       if (action === "chat") {
         router.push(`${redirect}?action=chat`);
@@ -30,7 +54,10 @@ function LoginContent() {
         router.push(redirect);
       }
     } catch (error) {
-      alert("بيانات الدخول غير صحيحة");
+      console.error(error);
+      alert("حدث خطأ أثناء تسجيل الدخول");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -56,13 +83,18 @@ function LoginContent() {
 
         <button
           onClick={login}
-          className="w-full rounded-xl bg-green-500 py-3 font-bold text-white hover:bg-green-600"
+          disabled={loading}
+          className="w-full rounded-xl bg-green-500 py-3 font-bold text-white hover:bg-green-600 disabled:opacity-60"
         >
-          دخول
+          {loading ? "جاري الدخول..." : "دخول"}
         </button>
 
         <button
-          onClick={() => router.push(`/register?redirect=${redirect}${action ? `&action=${action}` : ""}`)}
+          onClick={() =>
+            router.push(
+              `/register?redirect=${redirect}${action ? `&action=${action}` : ""}`
+            )
+          }
           className="mt-3 w-full rounded-xl bg-slate-900 py-3 font-bold text-white hover:bg-slate-800"
         >
           إنشاء حساب
