@@ -2,17 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  query,
-  where,
-  updateDoc,
-} from "firebase/firestore";
-import { auth, db } from "../../lib/firebase";
+import { supabase } from "../../lib/supabase";
 
 export default function MyPostsPage() {
   const router = useRouter();
@@ -22,36 +12,52 @@ export default function MyPostsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      setUserId(user.uid);
-      await loadPosts(user.uid);
-    });
-
-    return () => unsub();
+    checkUserAndLoadPosts();
   }, []);
 
+  const checkUserAndLoadPosts = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login?redirect=/my-posts");
+      return;
+    }
+
+    setUserId(user.id);
+    await loadPosts(user.id);
+  };
+
   const loadPosts = async (uid: string) => {
-    const q = query(collection(db, "posts"), where("userId", "==", uid));
-    const snap = await getDocs(q);
+    const { data, error } = await supabase
+      .from("posts")
+      .select("*")
+      .eq("userId", uid)
+      .order("createdAt", { ascending: false });
 
-    const data = snap.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    if (error) {
+      console.error(error);
+      setPosts([]);
+      setLoading(false);
+      return;
+    }
 
-    setPosts(data);
+    setPosts(data || []);
     setLoading(false);
   };
 
   const deletePost = async (id: string) => {
     if (!confirm("هل أنت متأكد من حذف الإعلان؟")) return;
 
-    await deleteDoc(doc(db, "posts", id));
+    const { error } = await supabase.from("posts").delete().eq("id", id);
+
+    if (error) {
+      console.error(error);
+      alert("فشل حذف الإعلان");
+      return;
+    }
+
     setPosts(posts.filter((p) => p.id !== id));
   };
 
@@ -59,18 +65,27 @@ export default function MyPostsPage() {
     const now = Date.now();
     const expiresAt = now + 3 * 24 * 60 * 60 * 1000;
 
-    await updateDoc(doc(db, "posts", post.id), {
-      isBoosted: true,
-      boostedAt: now,
-      boostExpiresAt: expiresAt,
-    });
+    const { error } = await supabase
+      .from("posts")
+      .update({
+        isBoosted: true,
+        boostedAt: now,
+        boostExpiresAt: expiresAt,
+      })
+      .eq("id", post.id);
+
+    if (error) {
+      console.error(error);
+      alert("فشل ترويج الإعلان");
+      return;
+    }
 
     alert("🔥 تم ترويج الإعلان 3 أيام");
 
     setPosts(
       posts.map((p) =>
         p.id === post.id
-          ? { ...p, isBoosted: true, boostedAt: now }
+          ? { ...p, isBoosted: true, boostedAt: now, boostExpiresAt: expiresAt }
           : p
       )
     );
@@ -108,23 +123,20 @@ export default function MyPostsPage() {
         ) : (
           <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
             {posts.map((post) => (
-              <div
-                key={post.id}
-                className="rounded-3xl bg-white p-4 shadow"
-              >
+              <div key={post.id} className="rounded-3xl bg-white p-4 shadow">
                 <div className="mb-3 flex items-center justify-between">
-                  <h2 className="font-black text-lg truncate">
+                  <h2 className="truncate text-lg font-black">
                     {post.title}
                   </h2>
 
                   {post.isBoosted && (
-                    <span className="bg-orange-500 text-white text-xs px-2 py-1 rounded">
+                    <span className="rounded bg-orange-500 px-2 py-1 text-xs text-white">
                       🔥 مروّج
                     </span>
                   )}
                 </div>
 
-                <p className="text-slate-500 text-sm line-clamp-2">
+                <p className="line-clamp-2 text-sm text-slate-500">
                   {post.description}
                 </p>
 
@@ -148,11 +160,11 @@ export default function MyPostsPage() {
                   </button>
 
                   <button
-  onClick={() => router.push(`/boost/${post.id}`)}
-  className="rounded-xl bg-orange-500 py-2 text-white"
->
-  🔥 ترويج
-</button>
+                    onClick={() => router.push(`/boost/${post.id}`)}
+                    className="rounded-xl bg-orange-500 py-2 text-white"
+                  >
+                    🔥 ترويج
+                  </button>
 
                   <button
                     onClick={() => deletePost(post.id)}
