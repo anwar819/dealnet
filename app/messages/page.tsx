@@ -2,16 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  query,
-  where,
-} from "firebase/firestore";
-import { auth, db } from "../../lib/firebase";
+import { supabase } from "../../lib/supabase";
 
 export default function MessagesPage() {
   const router = useRouter();
@@ -22,49 +13,54 @@ export default function MessagesPage() {
   const [chats, setChats] = useState<any[]>([]);
 
   useEffect(() => {
-    const authUnsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+    loadChats();
+  }, []);
 
-      setUserId(user.uid);
+  const loadChats = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      const userSnap = await getDoc(doc(db, "users", user.uid));
+    if (!user) {
+      router.push("/login");
+      return;
+    }
 
-      if (userSnap.exists() && userSnap.data().isBlocked) {
-        setIsBlocked(true);
-        setLoading(false);
-        alert("🚫 تم حظر حسابك");
-        router.push("/");
-        return;
-      }
+    setUserId(user.id);
 
-      const q = query(
-        collection(db, "chats"),
-        where("users", "array-contains", user.uid)
-      );
+    const { data: profile } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .single();
 
-      const chatUnsub = onSnapshot(q, (snapshot) => {
-        const data: any[] = snapshot.docs.map((item) => ({
-          id: item.id,
-          ...item.data(),
-        }));
+    if (profile?.isBlocked) {
+      setIsBlocked(true);
+      setLoading(false);
+      alert("🚫 تم حظر حسابك");
+      router.push("/");
+      return;
+    }
 
-        data.sort((a: any, b: any) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    const { data, error } = await supabase
+      .from("chats")
+      .select("*")
+      .contains("users", [user.id])
+      .order("updatedAt", { ascending: false });
 
-        setChats(data);
-        setLoading(false);
-      });
+    if (error) {
+      console.error(error);
+      setLoading(false);
+      return;
+    }
 
-      return () => chatUnsub();
-    });
-
-    return () => authUnsub();
-  }, [router]);
+    setChats(data || []);
+    setLoading(false);
+  };
 
   const formatDate = (value?: number) => {
     if (!value) return "";
+
     return new Date(value).toLocaleString("ar-IQ", {
       hour: "2-digit",
       minute: "2-digit",
@@ -85,7 +81,9 @@ export default function MessagesPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100">
         <div className="rounded-3xl bg-white p-8 text-center shadow">
-          <h1 className="text-2xl font-black text-red-600">🚫 حسابك محظور</h1>
+          <h1 className="text-2xl font-black text-red-600">
+            🚫 حسابك محظور
+          </h1>
         </div>
       </main>
     );
@@ -96,6 +94,7 @@ export default function MessagesPage() {
       <div className="mx-auto max-w-4xl">
         <section className="mb-6 rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
           <h1 className="text-3xl font-black">📩 الرسائل</h1>
+
           <p className="mt-2 text-slate-300">
             جميع محادثاتك مع البائعين والمشترين في مكان واحد.
           </p>
@@ -106,6 +105,7 @@ export default function MessagesPage() {
             <p className="text-xl font-black text-slate-800">
               لا توجد محادثات بعد
             </p>
+
             <p className="mt-2 text-slate-500">
               عندما تبدأ محادثة مع بائع ستظهر هنا.
             </p>
@@ -121,7 +121,11 @@ export default function MessagesPage() {
           <div className="overflow-hidden rounded-3xl bg-white shadow">
             {chats.map((chat) => {
               const isSeller = chat.sellerId === userId;
-              const roleLabel = isSeller ? "مشتري محتمل" : "بائع";
+
+              const roleLabel = isSeller
+                ? "مشتري محتمل"
+                : "بائع";
+
               const otherName = isSeller
                 ? chat.buyerName || "مستخدم"
                 : chat.sellerName || "مستخدم";
@@ -129,7 +133,9 @@ export default function MessagesPage() {
               return (
                 <button
                   key={chat.id}
-                  onClick={() => router.push(`/chat/${chat.chatId || chat.id}`)}
+                  onClick={() =>
+                    router.push(`/chat/${chat.chatId || chat.id}`)
+                  }
                   className="flex w-full items-center gap-4 border-b border-slate-100 p-4 text-right transition hover:bg-slate-50"
                 >
                   <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-green-500 text-xl font-black text-white">
