@@ -1,16 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, db } from "../../../lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  updateDoc,
-} from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import { supabase } from "../../../lib/supabase";
 
 export default function AdminReportsPage() {
   const router = useRouter();
@@ -20,47 +12,65 @@ export default function AdminReportsPage() {
   const [reports, setReports] = useState<any[]>([]);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      const userSnap = await getDoc(doc(db, "users", user.uid));
-      const userData = userSnap.exists() ? userSnap.data() : null;
-
-      if (!userData?.isAdmin) {
-        setAllowed(false);
-        setLoading(false);
-        return;
-      }
-
-      setAllowed(true);
-      await loadReports();
-      setLoading(false);
-    });
-
-    return () => unsub();
+    checkAdmin();
   }, []);
 
+  const checkAdmin = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login?redirect=/admin/reports");
+      return;
+    }
+
+    const { data: profile } = await supabase
+      .from("users")
+      .select("isAdmin")
+      .eq("id", user.id)
+      .single();
+
+    if (!profile?.isAdmin) {
+      setAllowed(false);
+      setLoading(false);
+      return;
+    }
+
+    setAllowed(true);
+    await loadReports();
+    setLoading(false);
+  };
+
   const loadReports = async () => {
-    const snap = await getDocs(collection(db, "reports"));
+    const { data, error } = await supabase
+      .from("reports")
+      .select("*")
+      .order("createdAt", { ascending: false });
 
-    const data = snap.docs.map((item) => ({
-      id: item.id,
-      ...item.data(),
-    }));
+    if (error) {
+      console.error(error);
+      setReports([]);
+      return;
+    }
 
-    data.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-
-    setReports(data);
+    setReports(data || []);
   };
 
   const updateStatus = async (reportId: string, status: string) => {
-    await updateDoc(doc(db, "reports", reportId), {
-      status,
-      updatedAt: Date.now(),
-    });
+    const { error } = await supabase
+      .from("reports")
+      .update({
+        status,
+        updatedAt: Date.now(),
+      })
+      .eq("id", reportId);
+
+    if (error) {
+      console.error(error);
+      alert("فشل تحديث البلاغ");
+      return;
+    }
 
     await loadReports();
   };
@@ -78,9 +88,6 @@ export default function AdminReportsPage() {
       <main className="flex min-h-screen items-center justify-center bg-slate-100">
         <div className="rounded-3xl bg-white p-8 text-center shadow">
           <h1 className="text-2xl font-black text-red-600">غير مصرح</h1>
-          <p className="mt-2 text-slate-500">
-            هذه الصفحة مخصصة للإدارة فقط.
-          </p>
         </div>
       </main>
     );
@@ -89,63 +96,34 @@ export default function AdminReportsPage() {
   return (
     <main className="min-h-screen bg-slate-100 p-6">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-6 flex items-center justify-between">
+        <section className="mb-6 rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
           <h1 className="text-3xl font-black">🚨 لوحة البلاغات</h1>
-
-          <button
-            onClick={() => router.push("/marketplace")}
-            className="rounded-xl bg-slate-900 px-4 py-2 font-bold text-white"
-          >
-            الرجوع للسوق
-          </button>
-        </div>
+          <p className="mt-2 text-slate-300">إدارة بلاغات المستخدمين.</p>
+        </section>
 
         {reports.length === 0 ? (
           <div className="rounded-3xl bg-white p-10 text-center text-slate-500 shadow">
-            لا توجد بلاغات حاليًا.
+            لا توجد بلاغات حالياً.
           </div>
         ) : (
           <div className="space-y-4">
             {reports.map((report) => (
-              <div
-                key={report.id}
-                className="rounded-3xl bg-white p-5 shadow"
-              >
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h2 className="text-xl font-black">
-                      {report.postTitle || "إعلان بدون عنوان"}
-                    </h2>
+              <div key={report.id} className="rounded-3xl bg-white p-5 shadow">
+                <h2 className="text-xl font-black">
+                  {report.postTitle || "إعلان بدون عنوان"}
+                </h2>
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      السبب: {report.reason}
-                    </p>
-                  </div>
-
-                  <span
-                    className={`rounded-full px-4 py-1 text-sm font-bold ${
-                      report.status === "resolved"
-                        ? "bg-green-100 text-green-700"
-                        : report.status === "rejected"
-                        ? "bg-slate-100 text-slate-700"
-                        : "bg-yellow-100 text-yellow-700"
-                    }`}
-                  >
-                    {report.status === "resolved"
-                      ? "تمت المعالجة"
-                      : report.status === "rejected"
-                      ? "مرفوض"
-                      : "قيد المراجعة"}
-                  </span>
-                </div>
+                <p className="mt-2 text-sm text-slate-500">
+                  السبب: {report.reason || "غير محدد"}
+                </p>
 
                 {report.details && (
-                  <p className="mb-4 rounded-2xl bg-slate-50 p-4 text-slate-700">
+                  <p className="mt-4 rounded-2xl bg-slate-50 p-4 text-slate-700">
                     {report.details}
                   </p>
                 )}
 
-                <div className="flex flex-wrap gap-3">
+                <div className="mt-5 flex flex-wrap gap-3">
                   <button
                     onClick={() => router.push(`/post/${report.postId}`)}
                     className="rounded-xl bg-blue-500 px-4 py-2 font-bold text-white"
