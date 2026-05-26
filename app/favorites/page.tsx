@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, db } from "../../lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { supabase } from "../../lib/supabase";
 
 type PostType = {
   id: string;
@@ -24,48 +22,59 @@ export default function FavoritesPage() {
   const [userId, setUserId] = useState("");
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
+    loadFavorites();
+  }, []);
+
+  const loadFavorites = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+
+    setUserId(user.id);
+
+    try {
+      const { data: favorites, error: favError } = await supabase
+        .from("favorites")
+        .select("*")
+        .eq("userId", user.id);
+
+      if (favError) {
+        console.error(favError);
         setLoading(false);
         return;
       }
 
-      setUserId(user.uid);
+      const postIds = favorites?.map((f) => f.postId) || [];
 
-      try {
-        const favRef = collection(db, "favorites");
-        const q = query(favRef, where("userId", "==", user.uid));
-        const favSnap = await getDocs(q);
-
-        const postIds = favSnap.docs.map((doc) => doc.data().postId);
-
-        if (postIds.length === 0) {
-          setPosts([]);
-          setLoading(false);
-          return;
-        }
-
-        const postsSnap = await getDocs(collection(db, "posts"));
-
-        const allPosts: PostType[] = postsSnap.docs.map((doc) => ({
-          id: doc.id,
-          ...(doc.data() as any),
-        }));
-
-        const favoritePosts = allPosts.filter((post) =>
-          postIds.includes(post.id)
-        );
-
-        setPosts(favoritePosts);
-      } catch (error) {
-        console.error("Favorites error:", error);
-      } finally {
+      if (postIds.length === 0) {
+        setPosts([]);
         setLoading(false);
+        return;
       }
-    });
 
-    return () => unsub();
-  }, []);
+      const { data: postsData, error: postsError } = await supabase
+        .from("posts")
+        .select("*")
+        .in("id", postIds);
+
+      if (postsError) {
+        console.error(postsError);
+        setLoading(false);
+        return;
+      }
+
+      setPosts(postsData || []);
+    } catch (error) {
+      console.error("Favorites error:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getMainImage = (post: PostType) => {
     if (post.imageUrls?.length) return post.imageUrls[0];
@@ -95,27 +104,30 @@ export default function FavoritesPage() {
       <div className="mx-auto max-w-7xl">
         <section className="mb-8 rounded-3xl bg-gradient-to-l from-slate-950 via-slate-900 to-slate-800 p-8 text-white shadow-xl">
           <p className="mb-3 text-sm text-green-400">DealNet</p>
+
           <h1 className="text-4xl font-black">المفضلة</h1>
+
           <p className="mt-3 text-slate-300">
             الإعلانات التي قمت بحفظها للرجوع إليها لاحقًا.
           </p>
         </section>
-         {/* 🔙 الرجوع */}
-<div className="mb-6 flex items-center justify-between">
-  <button
-    onClick={() => (window.location.href = "/marketplace")}
-    className="rounded-xl bg-white px-4 py-2 font-bold shadow hover:bg-slate-100"
-  >
-    ← الرجوع إلى السوق
-  </button>
 
-  <a
-    href="/create-post"
-    className="rounded-xl bg-green-500 px-4 py-2 font-bold text-white hover:bg-green-600"
-  >
-    + نشر إعلان
-  </a>
-</div>
+        <div className="mb-6 flex items-center justify-between">
+          <button
+            onClick={() => (window.location.href = "/marketplace")}
+            className="rounded-xl bg-white px-4 py-2 font-bold shadow hover:bg-slate-100"
+          >
+            ← الرجوع إلى السوق
+          </button>
+
+          <a
+            href="/create-post"
+            className="rounded-xl bg-green-500 px-4 py-2 font-bold text-white hover:bg-green-600"
+          >
+            + نشر إعلان
+          </a>
+        </div>
+
         {posts.length === 0 ? (
           <div className="rounded-2xl bg-white p-10 text-center text-slate-500 shadow">
             لا توجد إعلانات محفوظة في المفضلة.
