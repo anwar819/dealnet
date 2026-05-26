@@ -2,21 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  query,
-  where,
-} from "firebase/firestore";
-import { auth, db } from "../../lib/firebase";
+import { supabase } from "../../lib/supabase";
 
 export default function AccountPage() {
   const router = useRouter();
 
-  const [userId, setUserId] = useState("");
   const [userData, setUserData] = useState<any>(null);
 
   const [postsCount, setPostsCount] = useState(0);
@@ -27,62 +17,72 @@ export default function AccountPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+    loadUser();
+  }, []);
 
-      setUserId(user.uid);
+  const loadUser = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      const userSnap = await getDoc(doc(db, "users", user.uid));
+    if (!user) {
+      router.push("/login");
+      return;
+    }
 
-      if (userSnap.exists()) {
-        setUserData(userSnap.data());
-      }
+    const { data } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .single();
 
-      await loadStats(user.uid);
+    if (!data) {
+      router.push("/login");
+      return;
+    }
 
-      setLoading(false);
-    });
+    setUserData(data);
 
-    return () => unsub();
-  }, [router]);
+    await loadStats(user.id);
+
+    setLoading(false);
+  };
 
   const loadStats = async (uid: string) => {
-    const postsQ = query(collection(db, "posts"), where("userId", "==", uid));
-    const postsSnap = await getDocs(postsQ);
-    setPostsCount(postsSnap.size);
+    const { count: posts } = await supabase
+      .from("posts")
+      .select("*", { count: "exact", head: true })
+      .eq("userId", uid);
 
-    const chatsQ = query(
-      collection(db, "chats"),
-      where("users", "array-contains", uid)
-    );
-    const chatsSnap = await getDocs(chatsQ);
-    setChatsCount(chatsSnap.size);
+    setPostsCount(posts || 0);
 
-    const ratingsQ = query(
-      collection(db, "ratings"),
-      where("sellerId", "==", uid)
-    );
-    const ratingsSnap = await getDocs(ratingsQ);
+    const { count: chats } = await supabase
+      .from("chats")
+      .select("*", { count: "exact", head: true });
 
-    const ratings = ratingsSnap.docs.map((item) =>
-      Number(item.data().rating || 0)
-    );
+    setChatsCount(chats || 0);
 
-    setRatingsCount(ratings.length);
+    const { data: ratings } = await supabase
+      .from("ratings")
+      .select("rating")
+      .eq("sellerId", uid);
+
+    const ratingsArray =
+      ratings?.map((item: any) => Number(item.rating || 0)) || [];
+
+    setRatingsCount(ratingsArray.length);
 
     const avg =
-      ratings.length > 0
-        ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length
+      ratingsArray.length > 0
+        ? ratingsArray.reduce((sum, value) => sum + value, 0) /
+          ratingsArray.length
         : 0;
 
     setAvgRating(avg);
   };
 
   const logout = async () => {
-    await signOut(auth);
+    await supabase.auth.signOut();
     router.push("/login");
   };
 
@@ -162,124 +162,6 @@ export default function AccountPage() {
             </div>
           </div>
         </section>
-
-        <section className="grid gap-4 md:grid-cols-4">
-          <div className="rounded-3xl bg-white p-5 text-center shadow">
-            <p className="text-3xl font-black text-slate-900">{postsCount}</p>
-            <p className="mt-1 text-sm font-bold text-slate-500">إعلاناتي</p>
-          </div>
-
-          <div className="rounded-3xl bg-white p-5 text-center shadow">
-            <p className="text-3xl font-black text-slate-900">{chatsCount}</p>
-            <p className="mt-1 text-sm font-bold text-slate-500">محادثاتي</p>
-          </div>
-
-          <div className="rounded-3xl bg-white p-5 text-center shadow">
-            <p className="text-3xl font-black text-yellow-500">
-              {avgRating.toFixed(1)} ⭐
-            </p>
-            <p className="mt-1 text-sm font-bold text-slate-500">
-              متوسط التقييم
-            </p>
-          </div>
-
-          <div className="rounded-3xl bg-white p-5 text-center shadow">
-            <p className="text-3xl font-black text-slate-900">
-              {ratingsCount}
-            </p>
-            <p className="mt-1 text-sm font-bold text-slate-500">عدد التقييمات</p>
-          </div>
-        </section>
-
-        <section className="grid gap-6 md:grid-cols-2">
-          <div className="rounded-3xl bg-white p-6 shadow">
-            <h2 className="mb-4 text-xl font-black">معلومات الحساب</h2>
-
-            <div className="space-y-3 text-slate-700">
-              <p>
-                <b>الاسم:</b> {userData.firstName} {userData.lastName}
-              </p>
-
-              <p>
-                <b>البريد:</b> {userData.email}
-              </p>
-
-              <p>
-                <b>الهاتف:</b> {userData.phone || "غير مضاف"}
-              </p>
-
-              <p>
-                <b>تاريخ الانضمام:</b>{" "}
-                {userData.createdAt
-                  ? new Date(userData.createdAt).toLocaleDateString("ar-IQ")
-                  : "غير معروف"}
-              </p>
-            </div>
-          </div>
-
-          <div className="rounded-3xl bg-white p-6 shadow">
-            <h2 className="mb-4 text-xl font-black">إجراءات سريعة</h2>
-
-            <div className="grid gap-3">
-              <button
-                onClick={() => router.push("/marketplace")}
-                className="rounded-xl bg-slate-900 py-3 font-bold text-white hover:bg-slate-800"
-              >
-                تصفح السوق
-              </button>
-
-              <button
-                onClick={() => router.push("/messages")}
-                className="rounded-xl bg-blue-500 py-3 font-bold text-white hover:bg-blue-600"
-              >
-                الرسائل
-              </button>
-
-              <button
-                onClick={() => router.push("/favorites")}
-                className="rounded-xl bg-red-500 py-3 font-bold text-white hover:bg-red-600"
-              >
-                المفضلة
-              </button>
-
-              <button
-                onClick={() => router.push("/create-post")}
-                className="rounded-xl bg-green-500 py-3 font-bold text-white hover:bg-green-600"
-              >
-                نشر إعلان جديد
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {userData.isAdmin && (
-          <section className="rounded-3xl bg-white p-6 shadow">
-            <h2 className="mb-4 text-xl font-black">لوحة الإدارة</h2>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <button
-                onClick={() => router.push("/admin/posts")}
-                className="rounded-xl bg-yellow-400 py-3 font-bold text-black hover:bg-yellow-500"
-              >
-                📦 إدارة الإعلانات
-              </button>
-
-              <button
-                onClick={() => router.push("/admin/users")}
-                className="rounded-xl bg-blue-500 py-3 font-bold text-white hover:bg-blue-600"
-              >
-                👥 إدارة المستخدمين
-              </button>
-
-              <button
-                onClick={() => router.push("/admin/reports")}
-                className="rounded-xl bg-red-500 py-3 font-bold text-white hover:bg-red-600"
-              >
-                🚨 البلاغات
-              </button>
-            </div>
-          </section>
-        )}
       </div>
     </main>
   );
