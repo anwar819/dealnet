@@ -2,50 +2,54 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "../../lib/firebase";
+import { supabase } from "../../lib/supabase";
 
 export default function Header() {
   const [user, setUser] = useState<any>(null);
   const [firstName, setFirstName] = useState("");
 
+  const loadUser = async () => {
+    const { data } = await supabase.auth.getUser();
+
+    if (!data.user) {
+      setUser(null);
+      setFirstName("");
+      return;
+    }
+
+    setUser(data.user);
+
+    const { data: profile } = await supabase
+      .from("users")
+      .select("firstName")
+      .eq("id", data.user.id)
+      .single();
+
+    setFirstName(profile?.firstName || "مستخدم");
+  };
+
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
-      if (!u) {
-        setUser(null);
-        setFirstName("");
-        return;
-      }
+    loadUser();
 
-      setUser(u);
-
-      const snap = await getDoc(doc(db, "users", u.uid));
-
-      if (snap.exists()) {
-        const data = snap.data();
-        setFirstName(data.firstName || "مستخدم");
-      } else {
-        setFirstName("مستخدم");
-      }
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      loadUser();
     });
 
-    return () => unsub();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-900 bg-black text-white shadow-lg">
       <div className="flex h-16 items-center justify-between px-6">
-        {/* اسم الموقع */}
-        <Link
-          href="/marketplace"
-          className="text-3xl font-black tracking-tight"
-        >
+        <Link href="/marketplace" className="text-3xl font-black tracking-tight">
           <span className="text-green-400">Deal</span>
           <span className="text-white">Net</span>
         </Link>
 
-        {/* حساب المستخدم أو تسجيل الدخول */}
         {user ? (
           <Link
             href="/account"
