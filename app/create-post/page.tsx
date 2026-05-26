@@ -1,11 +1,8 @@
 "use client";
 
 import { ChangeEvent, useEffect, useState } from "react";
-import { db, auth } from "../../lib/firebase";
-import { collection, addDoc, doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
-
+import { supabase } from "../../lib/supabase";
 
 const categories: Record<string, string[]> = {
   إلكترونيات: ["موبايلات", "لابتوبات", "شاشات", "كاميرات", "ألعاب إلكترونية"],
@@ -19,24 +16,13 @@ const categories: Record<string, string[]> = {
 
 export default function CreatePostPage() {
   const router = useRouter();
-  useEffect(() => {
-  const unsub = onAuthStateChanged(auth, async (user) => {
-    if (!user) return;
 
-    const snap = await getDoc(doc(db, "users", user.uid));
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [profile, setProfile] = useState<any>(null);
 
-    if (snap.exists() && snap.data().isBlocked) {
-      alert("🚫 تم حظر حسابك");
-      router.push("/");
-    }
-  });
-
-  return () => unsub();
-}, [router]);
   const [type, setType] = useState("sell");
   const [mainCategory, setMainCategory] = useState("");
   const [subCategory, setSubCategory] = useState("");
-
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [price, setPrice] = useState("");
@@ -54,12 +40,43 @@ export default function CreatePostPage() {
   const [analysis, setAnalysis] = useState<any>(null);
   const [fraudCheck, setFraudCheck] = useState<any>(null);
 
+  useEffect(() => {
+    checkUser();
+  }, []);
+
+  const checkUser = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      router.push("/login?redirect=/create-post");
+      return;
+    }
+
+    setCurrentUser(user);
+
+    const { data } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", user.id)
+      .single();
+
+    if (data?.isBlocked) {
+      alert("🚫 تم حظر حسابك");
+      router.push("/");
+      return;
+    }
+
+    setProfile(data);
+  };
+
   const resetChecks = () => {
     setAnalysis(null);
     setFraudCheck(null);
     setAiStep(title || desc ? "generated" : "start");
   };
-   
+
   const handleImages = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -71,10 +88,7 @@ export default function CreatePostPage() {
   };
 
   const generateWithAI = async () => {
-    if (aiInput.trim().length < 3) {
-      alert("اكتب فكرة الإعلان أولاً");
-      return;
-    }
+    if (aiInput.trim().length < 3) return alert("اكتب فكرة الإعلان أولاً");
 
     try {
       setLoadingAI(true);
@@ -93,11 +107,7 @@ export default function CreatePostPage() {
 
       if (data.mainCategory && categories[data.mainCategory]) {
         setMainCategory(data.mainCategory);
-        if (categories[data.mainCategory].includes(data.subCategory)) {
-          setSubCategory(data.subCategory);
-        } else {
-          setSubCategory("");
-        }
+        setSubCategory(categories[data.mainCategory].includes(data.subCategory) ? data.subCategory : "");
       }
 
       setAnalysis(null);
@@ -112,10 +122,7 @@ export default function CreatePostPage() {
   };
 
   const analyzePost = async () => {
-    if (!title || !desc) {
-      alert("اكتب العنوان والوصف أولاً");
-      return;
-    }
+    if (!title || !desc) return alert("اكتب العنوان والوصف أولاً");
 
     try {
       setLoadingAnalysis(true);
@@ -138,10 +145,7 @@ export default function CreatePostPage() {
   };
 
   const improvePost = async () => {
-    if (!title || !desc) {
-      alert("اكتب العنوان والوصف أولاً");
-      return;
-    }
+    if (!title || !desc) return alert("اكتب العنوان والوصف أولاً");
 
     try {
       setLoadingAI(true);
@@ -170,10 +174,7 @@ export default function CreatePostPage() {
   };
 
   const checkFraud = async () => {
-    if (!title || !desc) {
-      alert("اكتب العنوان والوصف أولاً");
-      return;
-    }
+    if (!title || !desc) return alert("اكتب العنوان والوصف أولاً");
 
     try {
       setLoadingFraud(true);
@@ -219,9 +220,9 @@ export default function CreatePostPage() {
 
   const handleSubmit = async () => {
     try {
-      if (!auth.currentUser) {
+      if (!currentUser) {
         alert("يجب تسجيل الدخول أولاً");
-        router.push("/login");
+        router.push("/login?redirect=/create-post");
         return;
       }
 
@@ -233,65 +234,51 @@ export default function CreatePostPage() {
       if (images.length === 0) return alert("يرجى إضافة صورة واحدة على الأقل");
       if (price && isNaN(Number(price))) return alert("السعر يجب أن يكون رقمًا فقط");
 
-      if (analysis && analysis.score < 50) {
-        alert("الإعلان ضعيف. يرجى تحسينه قبل النشر.");
-        return;
-      }
+      if (analysis && analysis.score < 50) return alert("الإعلان ضعيف. يرجى تحسينه قبل النشر.");
+      if (fraudCheck?.status === "danger") return alert("لا يمكن نشر إعلان مصنف كمشبوه.");
 
-      if (fraudCheck?.status === "danger") {
-        alert("لا يمكن نشر إعلان مصنف كمشبوه. يرجى تعديله وفحصه مرة أخرى.");
-        return;
-      }
-
-      if (!analysis) {
-        const ok = confirm("لم تقم بتحليل الإعلان بعد. هل تريد النشر بدون تحليل؟");
-        if (!ok) return;
-      }
-
-      if (!fraudCheck) {
-        const ok = confirm("لم تقم بفحص الأمان بعد. هل تريد النشر بدون فحص؟");
-        if (!ok) return;
-      }
+      if (!analysis && !confirm("لم تقم بتحليل الإعلان بعد. هل تريد النشر بدون تحليل؟")) return;
+      if (!fraudCheck && !confirm("لم تقم بفحص الأمان بعد. هل تريد النشر بدون فحص؟")) return;
 
       setLoading(true);
 
-      const user = auth.currentUser;
-      const userDoc = await getDoc(doc(db, "users", user.uid));
-
-      let userName = user.email || "مستخدم";
-      let phone = "";
-
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        const name = `${data.firstName || ""} ${data.lastName || ""}`.trim();
-        userName = name || user.email || "مستخدم";
-        phone = data.phone || "";
-      }
-
       const imageUrls = await uploadImages();
 
-      await addDoc(collection(db, "posts"), {
-  type,
-  mainCategory,
-  subCategory,
-  title,
-  desc,
-  description: desc,
-  price,
-  location,
-  imageUrls,
-  images: imageUrls,
-  userId: user.uid,
-  userName,
-  phone,
-  isFeatured: false,
-  isBoosted: false,
-  isHidden: false,
-  boostedAt: null,
-  boostExpiresAt: null,
-  views: 0,
-  createdAt: Date.now(),
-});
+      const name = `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim();
+      const userName = name || currentUser.email || "مستخدم";
+      const phone = profile?.phone || "";
+
+      const { error } = await supabase.from("posts").insert({
+        type,
+        mainCategory,
+        subCategory,
+        category: mainCategory,
+        title,
+        desc,
+        description: desc,
+        price,
+        location,
+        city: location,
+        imageUrls,
+        images: imageUrls,
+        imageUrl: imageUrls[0] || "",
+        userId: currentUser.id,
+        userName,
+        phone,
+        isFeatured: false,
+        isBoosted: false,
+        isHidden: false,
+        boostedAt: null,
+        boostExpiresAt: null,
+        views: 0,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      });
+
+      if (error) {
+        console.error(error);
+        throw new Error(error.message);
+      }
 
       alert("تم نشر الإعلان بنجاح");
       router.push("/marketplace");
@@ -376,26 +363,6 @@ export default function CreatePostPage() {
                 </p>
               )}
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <p className="mb-2 font-bold">المشاكل:</p>
-                  <ul className="list-inside list-disc text-sm leading-7 text-slate-600">
-                    {analysis.problems?.map((item: string, index: number) => (
-                      <li key={index}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div>
-                  <p className="mb-2 font-bold">الاقتراحات:</p>
-                  <ul className="list-inside list-disc text-sm leading-7 text-slate-600">
-                    {analysis.suggestions?.map((item: string, index: number) => (
-                      <li key={index}>{item}</li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-
               <button
                 onClick={improvePost}
                 disabled={loadingAI}
@@ -407,38 +374,9 @@ export default function CreatePostPage() {
           )}
 
           {fraudCheck && (
-            <div
-              className={`mt-5 rounded-2xl p-5 ${
-                fraudCheck.status === "safe"
-                  ? "bg-green-50"
-                  : fraudCheck.status === "danger"
-                  ? "bg-red-50"
-                  : "bg-yellow-50"
-              }`}
-            >
-              <p className="mb-2 font-black">
-                حالة الأمان:{" "}
-                {fraudCheck.status === "safe"
-                  ? "آمن ✅"
-                  : fraudCheck.status === "danger"
-                  ? "مشبوه ❌"
-                  : "يحتاج مراجعة ⚠️"}
-              </p>
-
+            <div className="mt-5 rounded-2xl bg-yellow-50 p-5">
+              <p className="mb-2 font-black">حالة الأمان: {fraudCheck.status}</p>
               <p className="mb-3 text-sm text-slate-700">{fraudCheck.message}</p>
-
-              <ul className="list-inside list-disc text-sm leading-7 text-slate-700">
-                {fraudCheck.reasons?.map((item: string, index: number) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-
-              <button
-                onClick={() => setAiStep("generated")}
-                className="mt-4 w-full rounded-xl bg-slate-900 py-3 font-bold text-white"
-              >
-                إعادة التحليل بعد التعديل
-              </button>
             </div>
           )}
         </section>
@@ -447,128 +385,63 @@ export default function CreatePostPage() {
           <h2 className="mb-6 text-2xl font-black">بيانات الإعلان</h2>
 
           <div className="grid gap-5 md:grid-cols-2">
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">نوع الإعلان</label>
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white p-3 outline-none focus:border-green-500"
-              >
-                <option value="sell">بيع</option>
-                <option value="buy">طلب شراء</option>
-                <option value="service">خدمة</option>
-                <option value="request">طلب خدمة</option>
-                <option value="partnership">شراكة</option>
-              </select>
-            </div>
+            <select value={type} onChange={(e) => setType(e.target.value)} className="w-full rounded-xl border p-3">
+              <option value="sell">بيع</option>
+              <option value="buy">طلب شراء</option>
+              <option value="service">خدمة</option>
+              <option value="request">طلب خدمة</option>
+              <option value="partnership">شراكة</option>
+            </select>
 
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">القسم الرئيسي</label>
-              <select
-                value={mainCategory}
-                onChange={(e) => {
-                  setMainCategory(e.target.value);
-                  setSubCategory("");
-                  resetChecks();
-                }}
-                className="w-full rounded-xl border border-slate-300 bg-white p-3 outline-none focus:border-green-500"
-              >
-                <option value="">اختر القسم الرئيسي</option>
-                {Object.keys(categories).map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
+            <select
+              value={mainCategory}
+              onChange={(e) => {
+                setMainCategory(e.target.value);
+                setSubCategory("");
+                resetChecks();
+              }}
+              className="w-full rounded-xl border p-3"
+            >
+              <option value="">اختر القسم الرئيسي</option>
+              {Object.keys(categories).map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+
+            <select
+              value={subCategory}
+              onChange={(e) => {
+                setSubCategory(e.target.value);
+                resetChecks();
+              }}
+              disabled={!mainCategory}
+              className="w-full rounded-xl border p-3"
+            >
+              <option value="">اختر القسم الفرعي</option>
+              {mainCategory &&
+                categories[mainCategory].map((sub) => (
+                  <option key={sub} value={sub}>{sub}</option>
                 ))}
-              </select>
-            </div>
+            </select>
 
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">القسم الفرعي</label>
-              <select
-                value={subCategory}
-                onChange={(e) => {
-                  setSubCategory(e.target.value);
-                  resetChecks();
-                }}
-                disabled={!mainCategory}
-                className="w-full rounded-xl border border-slate-300 bg-white p-3 outline-none focus:border-green-500 disabled:bg-slate-100"
-              >
-                <option value="">اختر القسم الفرعي</option>
-                {mainCategory &&
-                  categories[mainCategory].map((sub) => (
-                    <option key={sub} value={sub}>{sub}</option>
-                  ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">السعر</label>
-              <input
-                value={price}
-                onChange={(e) => {
-                  setPrice(e.target.value);
-                  resetChecks();
-                }}
-                placeholder="مثال: 500"
-                className="w-full rounded-xl border border-slate-300 p-3 outline-none focus:border-green-500"
-              />
-            </div>
+            <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="السعر" className="w-full rounded-xl border p-3" />
           </div>
 
-          <div className="mt-5">
-            <label className="mb-2 block text-sm font-bold text-slate-700">عنوان الإعلان</label>
-            <input
-              value={title}
-              onChange={(e) => {
-                setTitle(e.target.value);
-                resetChecks();
-              }}
-              placeholder="مثال: آيفون 13 برو بحالة ممتازة"
-              className="w-full rounded-xl border border-slate-300 p-3 outline-none focus:border-green-500"
-            />
-          </div>
+          <input value={title} onChange={(e) => { setTitle(e.target.value); resetChecks(); }} placeholder="عنوان الإعلان" className="mt-5 w-full rounded-xl border p-3" />
 
-          <div className="mt-5">
-            <label className="mb-2 block text-sm font-bold text-slate-700">الوصف</label>
-            <textarea
-              value={desc}
-              onChange={(e) => {
-                setDesc(e.target.value);
-                resetChecks();
-              }}
-              placeholder="اكتب وصفًا واضحًا للإعلان..."
-              rows={6}
-              className="w-full rounded-xl border border-slate-300 p-3 outline-none focus:border-green-500"
-            />
-          </div>
+          <textarea value={desc} onChange={(e) => { setDesc(e.target.value); resetChecks(); }} placeholder="الوصف" rows={6} className="mt-5 w-full rounded-xl border p-3" />
 
-          <div className="mt-5">
-            <label className="mb-2 block text-sm font-bold text-slate-700">الموقع</label>
-            <input
-              value={location}
-              onChange={(e) => {
-                setLocation(e.target.value);
-                resetChecks();
-              }}
-              placeholder="مثال: بغداد"
-              className="w-full rounded-xl border border-slate-300 p-3 outline-none focus:border-green-500"
-            />
-          </div>
+          <input value={location} onChange={(e) => { setLocation(e.target.value); resetChecks(); }} placeholder="الموقع" className="mt-5 w-full rounded-xl border p-3" />
         </section>
 
         <section className="rounded-3xl bg-white p-6 shadow">
           <h2 className="mb-4 text-2xl font-black">صور الإعلان</h2>
 
-          <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center transition hover:border-green-500 hover:bg-green-50">
+          <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center">
             <span className="text-4xl">📸</span>
             <span className="mt-3 font-bold text-slate-800">اختر صور الإعلان</span>
-            <span className="mt-1 text-sm text-slate-500">يمكنك اختيار أكثر من صورة</span>
 
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleImages}
-              className="hidden"
-            />
+            <input type="file" multiple accept="image/*" onChange={handleImages} className="hidden" />
           </label>
 
           {images.length > 0 && (
@@ -593,7 +466,7 @@ export default function CreatePostPage() {
         <button
           onClick={handleSubmit}
           disabled={loading}
-          className="w-full rounded-2xl bg-green-500 py-5 text-lg font-black text-white shadow-xl transition hover:bg-green-600 disabled:opacity-60"
+          className="w-full rounded-2xl bg-green-500 py-5 text-lg font-black text-white shadow-xl hover:bg-green-600 disabled:opacity-60"
         >
           {loading ? "جاري نشر الإعلان..." : "نشر الإعلان"}
         </button>
