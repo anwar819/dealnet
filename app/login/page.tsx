@@ -48,11 +48,10 @@ function LoginContent() {
         return;
       }
 
-      if (action === "chat") {
-        router.push(`${redirect}?action=chat`);
-      } else {
-        router.push(redirect);
-      }
+      const target = action === "chat" ? `${redirect}?action=chat` : redirect;
+
+router.push(target);
+router.refresh();
     } catch (error) {
       console.error(error);
       alert("حدث خطأ أثناء تسجيل الدخول");
