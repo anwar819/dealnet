@@ -1,19 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { auth, db } from "../../lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
-
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  query,
-  updateDoc,
-  where,
-} from "firebase/firestore";
+import { supabase } from "../../lib/supabase";
 
 type PostType = {
   id: string;
@@ -22,6 +10,7 @@ type PostType = {
   description?: string;
   price?: string;
   location?: string;
+  city?: string;
   userName?: string;
   type?: string;
   category?: string;
@@ -71,82 +60,88 @@ export default function MarketplacePage() {
   const [sortBy, setSortBy] = useState("smart");
 
   useEffect(() => {
-    async function loadPosts() {
-      try {
-        const snap = await getDocs(collection(db, "posts"));
-        const now = Date.now();
-
-for (const docSnap of snap.docs) {
-  const data = docSnap.data();
-
-  if (
-    data.isBoosted &&
-    data.boostExpiresAt &&
-    data.boostExpiresAt < now
-  ) {
-    // ⛔ انتهى الترويج
-    await updateDoc(doc(db, "posts", docSnap.id), {
-      isBoosted: false,
-      boostExpiresAt: null,
-    });
-  }
-}
-        const data: PostType[] = snap.docs.map((item) => ({
-          id: item.id,
-          ...(item.data() as any),
-        }));
-        
-        const favSnap = await getDocs(collection(db, "favorites"));
-        const favoriteCounts: Record<string, number> = {};
-
-        favSnap.docs.forEach((fav) => {
-          const postId = fav.data().postId;
-          favoriteCounts[postId] = (favoriteCounts[postId] || 0) + 1;
-        });
-
-        const postsWithCounts = data.map((post) => ({
-          ...post,
-          favoriteCount: favoriteCounts[post.id] || 0,
-        }));
-
-        setPosts(postsWithCounts);
-      } catch (error) {
-        console.error("Error loading posts:", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadPosts();
+    loadCurrentUserAndFavorites();
   }, []);
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setUserId("");
-        setFavorites([]);
+  const loadPosts = async () => {
+    try {
+      setLoading(true);
+
+      const now = Date.now();
+
+      await supabase
+        .from("posts")
+        .update({
+          isBoosted: false,
+          boostExpiresAt: null,
+        })
+        .eq("isBoosted", true)
+        .lt("boostExpiresAt", now);
+
+      const { data: postsData, error: postsError } = await supabase
+        .from("posts")
+        .select("*")
+        .eq("isHidden", false)
+        .order("createdAt", { ascending: false });
+
+      if (postsError) {
+        console.error("Error loading posts:", postsError);
+        setPosts([]);
         return;
       }
 
-      setUserId(user.uid);
+      const { data: favData, error: favError } = await supabase
+        .from("favorites")
+        .select("postId");
 
-      const q = query(
-        collection(db, "favorites"),
-        where("userId", "==", user.uid)
-      );
+      const favoriteCounts: Record<string, number> = {};
 
-      const snap = await getDocs(q);
+      if (!favError && favData) {
+        favData.forEach((fav: any) => {
+          favoriteCounts[fav.postId] = (favoriteCounts[fav.postId] || 0) + 1;
+        });
+      }
 
-      const favs: FavoriteType[] = snap.docs.map((item) => ({
-        id: item.id,
-        postId: item.data().postId,
+      const postsWithCounts = (postsData || []).map((post: any) => ({
+        ...post,
+        favoriteCount: favoriteCounts[post.id] || 0,
       }));
 
-      setFavorites(favs);
-    });
+      setPosts(postsWithCounts);
+    } catch (error) {
+      console.error("Error loading posts:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    return () => unsub();
-  }, []);
+  const loadCurrentUserAndFavorites = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      setUserId("");
+      setFavorites([]);
+      return;
+    }
+
+    setUserId(user.id);
+
+    const { data, error } = await supabase
+      .from("favorites")
+      .select("*")
+      .eq("userId", user.id);
+
+    if (error) {
+      console.error("Error loading favorites:", error);
+      setFavorites([]);
+      return;
+    }
+
+    setFavorites(data || []);
+  };
 
   const isActiveBoost = (post: PostType) => {
     return !!post.isBoosted && !!post.boostExpiresAt && post.boostExpiresAt > Date.now();
@@ -189,14 +184,23 @@ for (const docSnap of snap.docs) {
   const toggleFavorite = async (postId: string) => {
     if (!userId) {
       alert("يجب تسجيل الدخول أولاً لحفظ الإعلان");
-      window.location.href = "/login";
+      window.location.href = "/login?redirect=/marketplace";
       return;
     }
 
     const existing = favorites.find((fav) => fav.postId === postId);
 
     if (existing) {
-      await deleteDoc(doc(db, "favorites", existing.id));
+      const { error } = await supabase
+        .from("favorites")
+        .delete()
+        .eq("id", existing.id);
+
+      if (error) {
+        console.error(error);
+        alert("فشل حذف الإعلان من المفضلة");
+        return;
+      }
 
       setFavorites((prev) => prev.filter((fav) => fav.id !== existing.id));
 
@@ -208,13 +212,25 @@ for (const docSnap of snap.docs) {
         )
       );
     } else {
-      const created = await addDoc(collection(db, "favorites"), {
-        userId,
-        postId,
-        createdAt: Date.now(),
-      });
+      const { data, error } = await supabase
+        .from("favorites")
+        .insert([
+          {
+            userId,
+            postId,
+            createdAt: Date.now(),
+          },
+        ])
+        .select("*")
+        .single();
 
-      setFavorites((prev) => [...prev, { id: created.id, postId }]);
+      if (error) {
+        console.error(error);
+        alert("فشل إضافة الإعلان إلى المفضلة");
+        return;
+      }
+
+      setFavorites((prev) => [...prev, { id: data.id, postId }]);
 
       setPosts((prev) =>
         prev.map((post) =>
@@ -261,11 +277,12 @@ for (const docSnap of snap.docs) {
 
       const postMain = post.mainCategory || post.category || "";
       const postSub = post.subCategory || "";
+      const postCity = post.location || post.city || "";
       const priceNum = getPriceNumber(post.price);
 
       const text = `${post.title || ""} ${post.desc || ""} ${
         post.description || ""
-      } ${post.location || ""} ${postMain} ${postSub}`.toLowerCase();
+      } ${postCity} ${postMain} ${postSub}`.toLowerCase();
 
       const matchesSearch = text.includes(search.trim().toLowerCase());
       const matchesMain =
@@ -273,8 +290,7 @@ for (const docSnap of snap.docs) {
       const matchesSub =
         selectedSubCategory === "الكل" || postSub === selectedSubCategory;
       const matchesCity =
-        !city.trim() ||
-        (post.location || "").toLowerCase().includes(city.trim().toLowerCase());
+        !city.trim() || postCity.toLowerCase().includes(city.trim().toLowerCase());
       const matchesMin = !minPrice || priceNum >= Number(minPrice);
       const matchesMax = !maxPrice || priceNum <= Number(maxPrice);
 
@@ -288,46 +304,23 @@ for (const docSnap of snap.docs) {
       );
     });
 
-   result = [...result].sort((a, b) => {
-  const now = Date.now();
+    result = [...result].sort((a, b) => {
+      const aBoosted = isActiveBoost(a);
+      const bBoosted = isActiveBoost(b);
 
-  const aBoosted =
-    a.isBoosted === true &&
-    a.boostExpiresAt &&
-    a.boostExpiresAt > now;
+      if (aBoosted && !bBoosted) return -1;
+      if (!aBoosted && bBoosted) return 1;
 
-  const bBoosted =
-    b.isBoosted === true &&
-    b.boostExpiresAt &&
-    b.boostExpiresAt > now;
+      if (a.isFeatured && !b.isFeatured) return -1;
+      if (!a.isFeatured && b.isFeatured) return 1;
 
-  // 🔥 الإعلانات المروّجة أولاً
-  if (aBoosted && !bBoosted) return -1;
-  if (!aBoosted && bBoosted) return 1;
+      if (sortBy === "low") return getPriceNumber(a.price) - getPriceNumber(b.price);
+      if (sortBy === "high") return getPriceNumber(b.price) - getPriceNumber(a.price);
+      if (sortBy === "views") return (b.views || 0) - (a.views || 0);
+      if (sortBy === "favorites") return (b.favoriteCount || 0) - (a.favoriteCount || 0);
 
-  // ✨ الإعلانات المميزة بعدها
-  if (a.isFeatured && !b.isFeatured) return -1;
-  if (!a.isFeatured && b.isFeatured) return 1;
-
-  // باقي الترتيب
-  if (sortBy === "low") {
-    return getPriceNumber(a.price) - getPriceNumber(b.price);
-  }
-
-  if (sortBy === "high") {
-    return getPriceNumber(b.price) - getPriceNumber(a.price);
-  }
-
-  if (sortBy === "views") {
-    return (b.views || 0) - (a.views || 0);
-  }
-
-  if (sortBy === "favorites") {
-    return (b.favoriteCount || 0) - (a.favoriteCount || 0);
-  }
-
-  return (b.createdAt || 0) - (a.createdAt || 0);
-});
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
 
     return result;
   }, [
@@ -558,16 +551,16 @@ for (const docSnap of snap.docs) {
                     </span>
 
                     {boosted && (
-  <span className="absolute bottom-3 left-3 z-10 rounded-full bg-orange-500 px-3 py-1 text-xs font-bold text-white shadow-lg">
-    🔥 مروّج
-  </span>
-)}
+                      <span className="absolute bottom-3 left-3 z-10 rounded-full bg-orange-500 px-3 py-1 text-xs font-bold text-white shadow-lg">
+                        🔥 مروّج
+                      </span>
+                    )}
 
-{!boosted && post.isFeatured && (
-  <span className="absolute bottom-3 left-3 z-10 rounded-full bg-yellow-400 px-3 py-1 text-xs font-bold text-black shadow-lg">
-    ✨ مميز
-  </span>
-)}
+                    {!boosted && post.isFeatured && (
+                      <span className="absolute bottom-3 left-3 z-10 rounded-full bg-yellow-400 px-3 py-1 text-xs font-bold text-black shadow-lg">
+                        ✨ مميز
+                      </span>
+                    )}
 
                     <button
                       onClick={(e) => {
@@ -611,7 +604,7 @@ for (const docSnap of snap.docs) {
                       </p>
 
                       <p className="text-xs font-bold text-slate-400">
-                        📍 {post.location || "غير محدد"}
+                        📍 {post.location || post.city || "غير محدد"}
                       </p>
                     </div>
 
