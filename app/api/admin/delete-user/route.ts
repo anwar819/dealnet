@@ -11,35 +11,25 @@ export async function POST(req: Request) {
     const { userId } = await req.json();
 
     if (!userId) {
-      return NextResponse.json(
-        { error: "User ID required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "User ID required" }, { status: 400 });
     }
 
-    // حذف المستخدم من Auth
+    await supabaseAdmin.from("users").delete().eq("id", userId);
+
     const { error: authError } =
       await supabaseAdmin.auth.admin.deleteUser(userId);
 
-    if (authError) {
+    if (authError && authError.message !== "User not found") {
       return NextResponse.json(
         { error: authError.message },
         { status: 500 }
       );
     }
 
-    // حذف من جدول users
-    await supabaseAdmin
-      .from("users")
-      .delete()
-      .eq("id", userId);
-
-    return NextResponse.json({
-      success: true,
-    });
+    return NextResponse.json({ success: true });
   } catch (error: any) {
     return NextResponse.json(
-      { error: error.message },
+      { error: error.message || "Server error" },
       { status: 500 }
     );
   }
