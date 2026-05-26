@@ -87,20 +87,28 @@ export default function AdminUsers() {
     await loadUsers();
   };
 
-  const deleteUser = async (id: string) => {
-    if (!confirm("هل تريد حذف الحساب من جدول المستخدمين؟")) return;
+ const deleteUser = async (id: string) => {
+  if (!confirm("هل تريد حذف الحساب نهائياً؟")) return;
 
-    const { error } = await supabase.from("users").delete().eq("id", id);
+  const res = await fetch("/api/admin/delete-user", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ userId: id }),
+  });
 
-    if (error) {
-      console.error(error);
-      alert("فشل حذف الحساب");
-      return;
-    }
+  const result = await res.json();
 
-    setUsers(users.filter((u) => u.id !== id));
-    alert("تم حذف الحساب من جدول المستخدمين");
-  };
+  if (!res.ok) {
+    console.error(result);
+    alert("فشل حذف الحساب نهائياً");
+    return;
+  }
+
+  setUsers(users.filter((u) => u.id !== id));
+  alert("تم حذف الحساب نهائياً");
+};
 
   if (loading) {
     return (
