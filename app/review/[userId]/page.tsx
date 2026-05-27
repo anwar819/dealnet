@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { createNotification } from "../../../lib/notifications";
 
 export default function ReviewPage() {
   const router = useRouter();
@@ -11,6 +12,8 @@ export default function ReviewPage() {
   const chatId = userId as string;
 
   const [currentUserId, setCurrentUserId] = useState("");
+  const [currentUserName, setCurrentUserName] = useState("مستخدم");
+
   const [chat, setChat] = useState<any>(null);
   const [targetUserId, setTargetUserId] = useState("");
   const [targetName, setTargetName] = useState("مستخدم");
@@ -38,6 +41,18 @@ export default function ReviewPage() {
 
       setCurrentUserId(user.id);
 
+      const { data: profile } = await supabase
+        .from("users")
+        .select("firstName,lastName")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const myName =
+        `${profile?.firstName || ""} ${profile?.lastName || ""}`.trim() ||
+        "مستخدم";
+
+      setCurrentUserName(myName);
+
       const { data: chatData, error } = await supabase
         .from("chats")
         .select("*")
@@ -57,9 +72,7 @@ export default function ReviewPage() {
       }
 
       const otherId =
-        user.id === chatData.sellerId
-          ? chatData.buyerId
-          : chatData.sellerId;
+        user.id === chatData.sellerId ? chatData.buyerId : chatData.sellerId;
 
       const otherName =
         user.id === chatData.sellerId
@@ -102,6 +115,16 @@ export default function ReviewPage() {
         alert("فشل حفظ التقييم");
         return;
       }
+
+      await createNotification({
+        userId: targetUserId,
+        title: "⭐ تقييم جديد",
+        message: `قام ${currentUserName} بتقييمك ${rating} نجوم بخصوص: ${
+          chat?.postTitle || "إعلان"
+        }`,
+        link: `/profile/${targetUserId}`,
+        type: "review",
+      });
 
       alert("تم حفظ التقييم بنجاح");
       router.push(`/chat/${chatId}`);
