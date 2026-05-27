@@ -2,20 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  onSnapshot,
-  orderBy,
-  query,
-  setDoc,
-  where,
-} from "firebase/firestore";
-import { auth, db } from "../../../lib/firebase";
+import { supabase } from "../../../lib/supabase";
 import { createNotification } from "../../../lib/notifications";
+
 export default function ChatPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -33,17 +22,62 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    checkUser();
+  }, []);
+
+  useEffect(() => {
+    if (!chatId || !userId || isBlocked) return;
+
+    loadChat();
+    loadMessages();
+
+    const channel = supabase
+      .channel(`messages-${chatId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "messages",
+          filter: `chatId=eq.${chatId}`,
+        },
+        () => {
+          loadMessages();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [chatId, userId, isBlocked]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [messages]);
+
+  const checkUser = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) {
         router.push("/login");
         return;
       }
 
-      setUserId(user.uid);
+      setUserId(user.id);
 
-      const userSnap = await getDoc(doc(db, "users", user.uid));
+      const { data: profile } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", user.id)
+        .single();
 
-      if (userSnap.exists() && userSnap.data().isBlocked) {
+      if (profile?.isBlocked) {
         setIsBlocked(true);
         alert("🚫 تم حظر حسابك");
         router.push("/");
@@ -51,23 +85,24 @@ export default function ChatPage() {
       }
 
       setCheckingUser(false);
-    });
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء التحقق من الحساب");
+    }
+  };
 
-    return () => unsub();
-  }, [router]);
+  const loadChat = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("chats")
+        .select("*")
+        .eq("chatId", chatId)
+        .single();
 
-  useEffect(() => {
-    if (!chatId || !userId || isBlocked) return;
-
-    const chatRef = doc(db, "chats", chatId);
-
-    const chatUnsub = onSnapshot(chatRef, (snap) => {
-      if (!snap.exists()) {
+      if (error || !data) {
         setChat(null);
         return;
       }
-
-      const data = snap.data();
 
       if (!data.users?.includes(userId)) {
         alert("غير مصرح لك بدخول هذه المحادثة");
@@ -76,32 +111,31 @@ export default function ChatPage() {
       }
 
       setChat(data);
-    });
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
-    const q = query(
-      collection(db, "messages"),
-      where("chatId", "==", chatId),
-      orderBy("createdAt", "asc")
-    );
+  const loadMessages = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("messages")
+        .select("*")
+        .eq("chatId", chatId)
+        .order("createdAt", {
+          ascending: true,
+        });
 
-    const msgUnsub = onSnapshot(q, (snapshot) => {
-      const data: any[] = snapshot.docs.map((item) => ({
-        id: item.id,
-        ...item.data(),
-      }));
+      if (error) {
+        console.error(error);
+        return;
+      }
 
-      setMessages(data);
-    });
-
-    return () => {
-      chatUnsub();
-      msgUnsub();
-    };
-  }, [chatId, userId, isBlocked, router]);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+      setMessages(data || []);
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const sendMessage = async () => {
     if (isBlocked) {
@@ -123,35 +157,53 @@ export default function ChatPage() {
       const messageText = text.trim();
       const createdAt = Date.now();
 
-      await addDoc(collection(db, "messages"), {
-        chatId,
-        postId: chat?.postId || "",
-        text: messageText,
-        senderId: userId,
-        createdAt,
-      });
+      const { error: msgError } = await supabase
+        .from("messages")
+        .insert({
+          chatId,
+          postId: chat?.postId || "",
+          text: messageText,
+          senderId: userId,
+          createdAt,
+        });
 
-      await setDoc(
-        doc(db, "chats", chatId),
-        {
+      if (msgError) {
+        console.error(msgError);
+        alert("فشل إرسال الرسالة");
+        return;
+      }
+
+      const { error: chatError } = await supabase
+        .from("chats")
+        .update({
           lastMessage: messageText,
           updatedAt: createdAt,
-        },
-        { merge: true }
-      );
-    const targetUser =
-  userId === chat?.sellerId ? chat?.buyerId : chat?.sellerId;
+        })
+        .eq("chatId", chatId);
 
-if (targetUser) {
-  await createNotification({
-    userId: targetUser,
-    title: "💬 رسالة جديدة",
-    message: `لديك رسالة جديدة بخصوص: ${chat?.postTitle || "إعلان"}`,
-    link: `/chat/${chatId}`,
-    type: "chat",
-  });
-}
+      if (chatError) {
+        console.error(chatError);
+      }
+
+      const targetUser =
+        userId === chat?.sellerId
+          ? chat?.buyerId
+          : chat?.sellerId;
+
+      if (targetUser) {
+        await createNotification({
+          userId: targetUser,
+          title: "💬 رسالة جديدة",
+          message: `لديك رسالة جديدة بخصوص: ${
+            chat?.postTitle || "إعلان"
+          }`,
+          link: `/chat/${chatId}`,
+          type: "chat",
+        });
+      }
+
       setText("");
+      loadMessages();
     } catch (error) {
       console.error(error);
       alert("حدث خطأ أثناء إرسال الرسالة");
@@ -162,6 +214,7 @@ if (targetUser) {
 
   const formatTime = (value?: number) => {
     if (!value) return "";
+
     return new Date(value).toLocaleTimeString("ar-IQ", {
       hour: "2-digit",
       minute: "2-digit",
@@ -180,7 +233,9 @@ if (targetUser) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100">
         <div className="rounded-3xl bg-white p-8 text-center shadow">
-          <h1 className="text-2xl font-black text-red-600">🚫 حسابك محظور</h1>
+          <h1 className="text-2xl font-black text-red-600">
+            🚫 حسابك محظور
+          </h1>
         </div>
       </main>
     );
@@ -189,19 +244,25 @@ if (targetUser) {
   return (
     <main className="min-h-screen bg-slate-100 p-4 md:p-6">
       <div className="mx-auto flex h-[calc(100vh-120px)] max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-xl">
-        {/* Header */}
+
         <div className="flex items-center justify-between border-b bg-slate-950 p-4 text-white">
           <div>
-            <h1 className="text-xl font-black">💬 المحادثة</h1>
+            <h1 className="text-xl font-black">
+              💬 المحادثة
+            </h1>
+
             <p className="mt-1 text-sm text-slate-300">
               {chat?.postTitle || "إعلان"}
             </p>
           </div>
 
           <div className="flex gap-2">
+
             {chat?.postId && (
               <button
-                onClick={() => router.push(`/post/${chat.postId}`)}
+                onClick={() =>
+                  router.push(`/post/${chat.postId}`)
+                }
                 className="rounded-xl bg-blue-500 px-4 py-2 text-sm font-bold text-white hover:bg-blue-600"
               >
                 الإعلان
@@ -214,17 +275,19 @@ if (targetUser) {
             >
               الرسائل
             </button>
+
           </div>
         </div>
 
-        {/* Messages */}
         <div className="flex-1 space-y-3 overflow-y-auto bg-slate-100 p-4">
+
           {messages.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <div className="rounded-3xl bg-white p-6 text-center shadow">
                 <p className="text-lg font-black text-slate-800">
                   لا توجد رسائل بعد
                 </p>
+
                 <p className="mt-2 text-sm text-slate-500">
                   ابدأ المحادثة الآن.
                 </p>
@@ -237,7 +300,9 @@ if (targetUser) {
               return (
                 <div
                   key={msg.id}
-                  className={`flex ${mine ? "justify-end" : "justify-start"}`}
+                  className={`flex ${
+                    mine ? "justify-end" : "justify-start"
+                  }`}
                 >
                   <div
                     className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-7 shadow-sm ${
@@ -250,7 +315,9 @@ if (targetUser) {
 
                     <div
                       className={`mt-1 text-[11px] ${
-                        mine ? "text-green-50" : "text-slate-400"
+                        mine
+                          ? "text-green-50"
+                          : "text-slate-400"
                       }`}
                     >
                       {formatTime(msg.createdAt)}
@@ -264,14 +331,16 @@ if (targetUser) {
           <div ref={bottomRef} />
         </div>
 
-        {/* Input */}
         <div className="border-t bg-white p-4">
           <div className="flex gap-2">
+
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") sendMessage();
+                if (e.key === "Enter") {
+                  sendMessage();
+                }
               }}
               placeholder="اكتب رسالة..."
               className="flex-1 rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500"
@@ -284,6 +353,7 @@ if (targetUser) {
             >
               {sending ? "..." : "إرسال"}
             </button>
+
           </div>
         </div>
       </div>
