@@ -35,11 +35,15 @@ export default function Sidebar({
 
     setUser(user);
 
-    const { data } = await supabase
+    // ✅ البحث بالبريد بدل id
+    const { data, error } = await supabase
       .from("users")
       .select("*")
-      .eq("id", user.id)
+      .eq("email", user.email)
       .single();
+
+    console.log("USER DATA:", data);
+    console.log("USER ERROR:", error);
 
     if (data) {
       setFirstName(data.firstName || "مستخدم");
