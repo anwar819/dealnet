@@ -7,6 +7,7 @@ import { supabase } from "../../lib/supabase";
 export default function Header() {
   const [user, setUser] = useState<any>(null);
   const [firstName, setFirstName] = useState("");
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const loadUser = async () => {
     const { data } = await supabase.auth.getUser();
@@ -14,6 +15,7 @@ export default function Header() {
     if (!data.user) {
       setUser(null);
       setFirstName("");
+      setUnreadCount(0);
       return;
     }
 
@@ -26,6 +28,27 @@ export default function Header() {
       .single();
 
     setFirstName(profile?.firstName || "مستخدم");
+
+    await loadUnreadNotifications(data.user.id);
+  };
+
+  const loadUnreadNotifications = async (userId: string) => {
+    const { count, error } = await supabase
+      .from("notifications")
+      .select("*", {
+        count: "exact",
+        head: true,
+      })
+      .eq("userId", userId)
+      .eq("isRead", false);
+
+    if (error) {
+      console.error(error);
+      setUnreadCount(0);
+      return;
+    }
+
+    setUnreadCount(count || 0);
   };
 
   useEffect(() => {
@@ -42,6 +65,30 @@ export default function Header() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const channel = supabase
+      .channel(`header-notifications-${user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+          filter: `userId=eq.${user.id}`,
+        },
+        () => {
+          loadUnreadNotifications(user.id);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
   return (
     <header className="sticky top-0 z-50 border-b border-slate-900 bg-black text-white shadow-lg">
       <div className="flex h-16 items-center justify-between px-6">
@@ -51,15 +98,31 @@ export default function Header() {
         </Link>
 
         {user ? (
-          <Link
-            href="/account"
-            className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold transition hover:bg-slate-800"
-          >
-            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500 text-white">
-              {firstName ? firstName.charAt(0).toUpperCase() : "U"}
-            </span>
-            <span>{firstName}</span>
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/notifications"
+              className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-xl transition hover:bg-slate-800"
+              title="الإشعارات"
+            >
+              🔔
+
+              {unreadCount > 0 && (
+                <span className="absolute -left-2 -top-2 flex h-6 min-w-[24px] items-center justify-center rounded-full bg-red-500 px-2 text-xs font-black text-white shadow">
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </Link>
+
+            <Link
+              href="/account"
+              className="flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold transition hover:bg-slate-800"
+            >
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500 text-white">
+                {firstName ? firstName.charAt(0).toUpperCase() : "U"}
+              </span>
+              <span>{firstName}</span>
+            </Link>
+          </div>
         ) : (
           <div className="flex items-center gap-2">
             <Link
