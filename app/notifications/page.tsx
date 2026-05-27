@@ -11,8 +11,31 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadNotifications();
+    init();
+
+    const channel = supabase
+      .channel("notifications-live")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "notifications",
+        },
+        async () => {
+          await loadNotifications();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
+
+  const init = async () => {
+    await loadNotifications();
+  };
 
   const loadNotifications = async () => {
     const {
@@ -44,15 +67,28 @@ export default function NotificationsPage() {
   const openNotification = async (item: any) => {
     await supabase
       .from("notifications")
-      .update({ isRead: true })
+      .update({
+        isRead: true,
+      })
       .eq("id", item.id);
+
+    setNotifications((prev) =>
+      prev.map((n) =>
+        n.id === item.id
+          ? {
+              ...n,
+              isRead: true,
+            }
+          : n
+      )
+    );
 
     if (item.link) {
       router.push(item.link);
-    } else {
-      await loadNotifications();
     }
   };
+
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   if (loading) {
     return (
@@ -66,10 +102,27 @@ export default function NotificationsPage() {
     <main className="min-h-screen bg-slate-100 p-4 md:p-6">
       <div className="mx-auto max-w-4xl space-y-6">
         <section className="rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
-          <h1 className="text-3xl font-black">🔔 الإشعارات</h1>
-          <p className="mt-2 text-slate-300">
-            جميع تنبيهات حسابك في مكان واحد.
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-black">
+                🔔 الإشعارات
+              </h1>
+
+              <p className="mt-2 text-slate-300">
+                جميع تنبيهات حسابك في مكان واحد.
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-white/10 px-5 py-3 text-center">
+              <div className="text-3xl font-black">
+                {unreadCount}
+              </div>
+
+              <div className="text-sm text-slate-300">
+                غير مقروء
+              </div>
+            </div>
+          </div>
         </section>
 
         {notifications.length === 0 ? (
@@ -84,14 +137,14 @@ export default function NotificationsPage() {
               <button
                 key={item.id}
                 onClick={() => openNotification(item)}
-                className={`block w-full rounded-3xl p-5 text-right shadow transition hover:-translate-y-1 ${
+                className={`block w-full rounded-3xl p-5 text-right shadow transition duration-200 hover:-translate-y-1 ${
                   item.isRead
                     ? "bg-white"
                     : "bg-green-50 ring-2 ring-green-200"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="flex-1">
                     <h2 className="text-lg font-black text-slate-900">
                       {item.title}
                     </h2>
@@ -108,11 +161,19 @@ export default function NotificationsPage() {
                   )}
                 </div>
 
-                <p className="mt-3 text-xs text-slate-400">
-                  {item.createdAt
-                    ? new Date(item.createdAt).toLocaleString("ar-IQ")
-                    : ""}
-                </p>
+                <div className="mt-4 flex items-center justify-between">
+                  <p className="text-xs text-slate-400">
+                    {item.createdAt
+                      ? new Date(item.createdAt).toLocaleString("ar-IQ")
+                      : ""}
+                  </p>
+
+                  {item.link && (
+                    <span className="text-sm font-bold text-green-600">
+                      فتح →
+                    </span>
+                  )}
+                </div>
               </button>
             ))}
           </div>
