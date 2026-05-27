@@ -104,9 +104,27 @@ export default function PublicProfilePage() {
                 {profile?.firstName || "مستخدم"} {profile?.lastName || ""}
               </h1>
 
-              <p className="mt-2 text-slate-300">
-                {profile?.email || ""}
-              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+  <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-slate-200">
+    📦 {posts.length} إعلان
+  </span>
+
+  <span className="rounded-full bg-white/10 px-3 py-1 text-sm text-slate-200">
+    ⭐ {ratingStats.average.toFixed(1)} تقييم
+  </span>
+
+  {posts.length >= 5 && ratingStats.average >= 4 && (
+    <span className="rounded-full bg-green-500 px-3 py-1 text-sm font-bold text-white">
+      ✔ بائع موثوق
+    </span>
+  )}
+
+  {posts.length > 0 && posts.length < 5 && (
+    <span className="rounded-full bg-blue-500 px-3 py-1 text-sm font-bold text-white">
+      🆕 بائع جديد
+    </span>
+  )}
+</div>
 
               <div className="mt-4 flex flex-wrap gap-2">
                 {profile?.isVerified && (
@@ -122,7 +140,28 @@ export default function PublicProfilePage() {
                 )}
               </div>
             </div>
+              <div className="flex flex-wrap gap-3">
+  <button
+    onClick={() => router.push("/marketplace")}
+    className="rounded-xl bg-white/10 px-5 py-3 font-bold text-white hover:bg-white/20"
+  >
+    ← الرجوع للسوق
+  </button>
 
+  <button
+    onClick={() => router.push(`/review/${profile.id}`)}
+    className="rounded-xl bg-yellow-400 px-5 py-3 font-bold text-black hover:bg-yellow-300"
+  >
+    ⭐ تقييم المستخدم
+  </button>
+
+  <button
+    onClick={() => router.push(`/chat/${profile.id}`)}
+    className="rounded-xl bg-green-500 px-5 py-3 font-bold text-white hover:bg-green-600"
+  >
+    💬 مراسلة المستخدم
+  </button>
+</div>
             <div className="rounded-3xl bg-white/10 p-5 text-center">
               <div className="text-3xl font-black">
                 {ratingStats.average.toFixed(1)}
