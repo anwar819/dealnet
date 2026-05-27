@@ -87,7 +87,12 @@ router.refresh();
         >
           {loading ? "جاري الدخول..." : "دخول"}
         </button>
-
+         <button
+  onClick={() => (window.location.href = "/forgot-password")}
+  className="mt-3 text-sm font-bold text-green-600 hover:underline"
+>
+  نسيت كلمة المرور؟
+</button>
         <button
           onClick={() =>
             router.push(
