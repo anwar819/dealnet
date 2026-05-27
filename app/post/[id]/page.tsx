@@ -289,9 +289,18 @@ export default function PostDetailsPage() {
               <div className="mt-4 rounded-2xl bg-slate-50 p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <p className="text-lg font-black text-slate-900">
-                      👤 {post.userName || "مستخدم"}
-                    </p>
+                    <button
+  onClick={() => router.push(`/profile/${post.userId}`)}
+  className="text-right transition hover:opacity-80"
+>
+  <p className="text-lg font-black text-slate-900 hover:text-green-600">
+    👤 {post.userName || "مستخدم"}
+  </p>
+
+  <p className="mt-1 text-xs font-bold text-slate-400">
+    عرض الملف الشخصي
+  </p>
+</button>
 
                     <div className="mt-2 flex items-center gap-2">
                       <span className="font-black text-yellow-500">
