@@ -2,9 +2,7 @@
 
 import { ChangeEvent, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { auth, db } from "../../../lib/firebase";
+import { supabase } from "../../../lib/supabase";
 
 const categories: Record<string, string[]> = {
   إلكترونيات: ["موبايلات", "لابتوبات", "شاشات", "كاميرات", "ألعاب إلكترونية"],
@@ -20,7 +18,6 @@ export default function EditPostPage() {
   const { id } = useParams();
   const router = useRouter();
 
-  const [userId, setUserId] = useState("");
   const [post, setPost] = useState<any>(null);
 
   const [type, setType] = useState("sell");
@@ -40,40 +37,53 @@ export default function EditPostPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    checkUserAndLoadPost();
+  }, [id]);
+
+  const checkUserAndLoadPost = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) {
         router.push(`/login?redirect=/edit/${id}`);
         return;
       }
 
-      setUserId(user.uid);
+      const { data: profile } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", user.id)
+        .single();
 
-      const userSnap = await getDoc(doc(db, "users", user.uid));
-
-      if (userSnap.exists() && userSnap.data().isBlocked) {
+      if (profile?.isBlocked) {
         alert("🚫 تم حظر حسابك");
         router.push("/");
         return;
       }
 
-      await loadPost(user.uid);
-    });
-
-    return () => unsub();
-  }, [id, router]);
+      await loadPost(user.id);
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء التحقق من الحساب");
+      setLoading(false);
+    }
+  };
 
   const loadPost = async (uid: string) => {
     try {
-      const ref = doc(db, "posts", id as string);
-      const snap = await getDoc(ref);
+      const { data, error } = await supabase
+        .from("posts")
+        .select("*")
+        .eq("id", id)
+        .single();
 
-      if (!snap.exists()) {
+      if (error || !data) {
         alert("الإعلان غير موجود");
         router.push("/my-posts");
         return;
       }
-
-      const data: any = snap.data();
 
       if (data.userId !== uid) {
         alert("لا يمكنك تعديل إعلان لا تملكه");
@@ -81,7 +91,7 @@ export default function EditPostPage() {
         return;
       }
 
-      setPost({ id: snap.id, ...data });
+      setPost(data);
 
       setType(data.type || "sell");
       setMainCategory(data.mainCategory || data.category || "");
@@ -93,9 +103,11 @@ export default function EditPostPage() {
       setIsHidden(data.isHidden === true);
 
       const imgs =
-        data.imageUrls || data.images || (data.imageUrl ? [data.imageUrl] : []);
+        data.imageUrls ||
+        data.images ||
+        (data.imageUrl ? [data.imageUrl] : []);
 
-      setOldImages(imgs);
+      setOldImages(imgs || []);
     } catch (error) {
       console.error(error);
       alert("حدث خطأ أثناء تحميل الإعلان");
@@ -147,8 +159,10 @@ export default function EditPostPage() {
 
     if (!mainCategory) return alert("يرجى اختيار القسم الرئيسي");
     if (!subCategory) return alert("يرجى اختيار القسم الفرعي");
-    if (title.trim().length < 5) return alert("العنوان يجب أن يكون 5 أحرف على الأقل");
-    if (desc.trim().length < 20) return alert("الوصف يجب أن يكون 20 حرفًا على الأقل");
+    if (title.trim().length < 5)
+      return alert("العنوان يجب أن يكون 5 أحرف على الأقل");
+    if (desc.trim().length < 20)
+      return alert("الوصف يجب أن يكون 20 حرفًا على الأقل");
     if (!location.trim()) return alert("يرجى إدخال الموقع");
     if (price && isNaN(Number(price))) return alert("السعر يجب أن يكون رقمًا فقط");
 
@@ -160,24 +174,35 @@ export default function EditPostPage() {
 
       if (finalImages.length === 0) {
         alert("يجب أن يحتوي الإعلان على صورة واحدة على الأقل");
-        setSaving(false);
         return;
       }
 
-      await updateDoc(doc(db, "posts", post.id), {
-        type,
-        mainCategory,
-        subCategory,
-        title: title.trim(),
-        desc: desc.trim(),
-        description: desc.trim(),
-        price,
-        location: location.trim(),
-        imageUrls: finalImages,
-        images: finalImages,
-        isHidden,
-        updatedAt: Date.now(),
-      });
+      const { error } = await supabase
+        .from("posts")
+        .update({
+          type,
+          mainCategory,
+          subCategory,
+          category: mainCategory,
+          title: title.trim(),
+          desc: desc.trim(),
+          description: desc.trim(),
+          price,
+          location: location.trim(),
+          city: location.trim(),
+          imageUrls: finalImages,
+          images: finalImages,
+          imageUrl: finalImages[0],
+          isHidden,
+          updatedAt: Date.now(),
+        })
+        .eq("id", post.id);
+
+      if (error) {
+        console.error(error);
+        alert("فشل حفظ التعديلات");
+        return;
+      }
 
       alert("تم حفظ التعديلات بنجاح");
       router.push(`/post/${post.id}`);
@@ -215,6 +240,7 @@ export default function EditPostPage() {
               <label className="mb-2 block text-sm font-bold text-slate-700">
                 نوع الإعلان
               </label>
+
               <select
                 value={type}
                 onChange={(e) => setType(e.target.value)}
@@ -232,6 +258,7 @@ export default function EditPostPage() {
               <label className="mb-2 block text-sm font-bold text-slate-700">
                 القسم الرئيسي
               </label>
+
               <select
                 value={mainCategory}
                 onChange={(e) => {
@@ -253,6 +280,7 @@ export default function EditPostPage() {
               <label className="mb-2 block text-sm font-bold text-slate-700">
                 القسم الفرعي
               </label>
+
               <select
                 value={subCategory}
                 onChange={(e) => setSubCategory(e.target.value)}
@@ -273,6 +301,7 @@ export default function EditPostPage() {
               <label className="mb-2 block text-sm font-bold text-slate-700">
                 السعر
               </label>
+
               <input
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
@@ -286,6 +315,7 @@ export default function EditPostPage() {
             <label className="mb-2 block text-sm font-bold text-slate-700">
               عنوان الإعلان
             </label>
+
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -298,6 +328,7 @@ export default function EditPostPage() {
             <label className="mb-2 block text-sm font-bold text-slate-700">
               الوصف
             </label>
+
             <textarea
               value={desc}
               onChange={(e) => setDesc(e.target.value)}
@@ -311,6 +342,7 @@ export default function EditPostPage() {
             <label className="mb-2 block text-sm font-bold text-slate-700">
               الموقع
             </label>
+
             <input
               value={location}
               onChange={(e) => setLocation(e.target.value)}
