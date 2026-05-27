@@ -1,5 +1,4 @@
-import { addDoc, collection } from "firebase/firestore";
-import { db } from "./firebase";
+import { supabase } from "./supabase";
 
 export async function createNotification({
   userId,
@@ -14,15 +13,25 @@ export async function createNotification({
   link?: string;
   type?: string;
 }) {
-  if (!userId) return;
+  try {
+    if (!userId) return;
 
-  await addDoc(collection(db, "notifications"), {
-    userId,
-    title,
-    message,
-    link,
-    type,
-    isRead: false,
-    createdAt: Date.now(),
-  });
+    const { error } = await supabase
+      .from("notifications")
+      .insert({
+        userId,
+        title,
+        message,
+        link,
+        type,
+        isRead: false,
+        createdAt: Date.now(),
+      });
+
+    if (error) {
+      console.error("Notification error:", error);
+    }
+  } catch (error) {
+    console.error("Create notification failed:", error);
+  }
 }

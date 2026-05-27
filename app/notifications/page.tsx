@@ -2,16 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDocs,
-  query,
-  updateDoc,
-  where,
-} from "firebase/firestore";
-import { auth, db } from "../../lib/firebase";
+import { supabase } from "../../lib/supabase";
 
 export default function NotificationsPage() {
   const router = useRouter();
@@ -20,40 +11,46 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        router.push("/login");
-        return;
-      }
+    loadNotifications();
+  }, []);
 
-      const q = query(
-        collection(db, "notifications"),
-        where("userId", "==", user.uid)
-      );
+  const loadNotifications = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-      const snap = await getDocs(q);
+    if (!user) {
+      router.push("/login?redirect=/notifications");
+      return;
+    }
 
-      const data = snap.docs.map((item) => ({
-        id: item.id,
-        ...item.data(),
-      }));
+    const { data, error } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("userId", user.id)
+      .order("createdAt", { ascending: false });
 
-      data.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-
-      setNotifications(data);
+    if (error) {
+      console.error(error);
+      setNotifications([]);
       setLoading(false);
-    });
+      return;
+    }
 
-    return () => unsub();
-  }, [router]);
+    setNotifications(data || []);
+    setLoading(false);
+  };
 
   const openNotification = async (item: any) => {
-    await updateDoc(doc(db, "notifications", item.id), {
-      isRead: true,
-    });
+    await supabase
+      .from("notifications")
+      .update({ isRead: true })
+      .eq("id", item.id);
 
     if (item.link) {
       router.push(item.link);
+    } else {
+      await loadNotifications();
     }
   };
 
@@ -88,7 +85,9 @@ export default function NotificationsPage() {
                 key={item.id}
                 onClick={() => openNotification(item)}
                 className={`block w-full rounded-3xl p-5 text-right shadow transition hover:-translate-y-1 ${
-                  item.isRead ? "bg-white" : "bg-green-50 ring-2 ring-green-200"
+                  item.isRead
+                    ? "bg-white"
+                    : "bg-green-50 ring-2 ring-green-200"
                 }`}
               >
                 <div className="flex items-start justify-between gap-3">
