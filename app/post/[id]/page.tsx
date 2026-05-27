@@ -335,6 +335,12 @@ export default function PostDetailsPage() {
                 >
                   مراسلة داخل الموقع
                 </button>
+                <button
+  onClick={() => router.push(`/report/${post.id}`)}
+  className="w-full rounded-xl bg-red-500 py-3 font-bold text-white hover:bg-red-600"
+>
+  🚨 إبلاغ عن الإعلان
+</button>
               </div>
             </div>
 
