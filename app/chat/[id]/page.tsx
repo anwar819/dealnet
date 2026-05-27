@@ -8,6 +8,7 @@ import { createNotification } from "../../../lib/notifications";
 export default function ChatPage() {
   const { id } = useParams();
   const router = useRouter();
+
   const chatId = id as string;
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
@@ -18,6 +19,7 @@ export default function ChatPage() {
 
   const [chat, setChat] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
+
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -41,7 +43,9 @@ export default function ChatPage() {
           table: "messages",
           filter: `chatId=eq.${chatId}`,
         },
-        () => loadMessages()
+        () => {
+          loadMessages();
+        }
       )
       .subscribe();
 
@@ -51,7 +55,9 @@ export default function ChatPage() {
   }, [chatId, userId, isBlocked]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
   }, [messages]);
 
   const checkUser = async () => {
@@ -75,8 +81,11 @@ export default function ChatPage() {
 
       if (profile?.isBlocked) {
         setIsBlocked(true);
+
         alert("🚫 تم حظر حسابك");
+
         router.push("/");
+
         return;
       }
 
@@ -102,7 +111,9 @@ export default function ChatPage() {
 
       if (!data.users?.includes(userId)) {
         alert("غير مصرح لك بدخول هذه المحادثة");
+
         router.push("/messages");
+
         return;
       }
 
@@ -118,7 +129,9 @@ export default function ChatPage() {
         .from("messages")
         .select("*")
         .eq("chatId", chatId)
-        .order("createdAt", { ascending: true });
+        .order("createdAt", {
+          ascending: true,
+        });
 
       if (error) {
         console.error(error);
@@ -129,7 +142,9 @@ export default function ChatPage() {
 
       await supabase
         .from("messages")
-        .update({ isRead: true })
+        .update({
+          isRead: true,
+        })
         .eq("chatId", chatId)
         .eq("receiverId", userId);
     } catch (error) {
@@ -158,29 +173,37 @@ export default function ChatPage() {
       const createdAt = Date.now();
 
       const targetUser =
-        userId === chat?.sellerId ? chat?.buyerId : chat?.sellerId;
+        userId === chat?.sellerId
+          ? chat?.buyerId
+          : chat?.sellerId;
 
       const myName =
-        chat?.buyerId === userId ? chat?.buyerName : chat?.sellerName;
+        chat?.buyerId === userId
+          ? chat?.buyerName
+          : chat?.sellerName;
 
-      const { error: msgError } = await supabase.from("messages").insert({
-        chatId,
-        postId: chat?.postId || "",
-        text: messageText,
-        senderId: userId,
-        senderName: myName || "مستخدم",
-        receiverId: targetUser || "",
-        isRead: false,
-        createdAt,
-      });
+      const { error: msgError } = await supabase
+        .from("messages")
+        .insert({
+          chatId,
+          postId: chat?.postId || "",
+          text: messageText,
+          senderId: userId,
+          senderName: myName || "مستخدم",
+          receiverId: targetUser || "",
+          isRead: false,
+          createdAt,
+        });
 
       if (msgError) {
         console.error(msgError);
+
         alert("فشل إرسال الرسالة");
+
         return;
       }
 
-      const { error: chatError } = await supabase
+      await supabase
         .from("chats")
         .update({
           lastMessage: messageText,
@@ -188,24 +211,24 @@ export default function ChatPage() {
         })
         .eq("chatId", chatId);
 
-      if (chatError) {
-        console.error(chatError);
-      }
-
       if (targetUser) {
         await createNotification({
           userId: targetUser,
           title: "💬 رسالة جديدة",
-          message: `لديك رسالة جديدة بخصوص: ${chat?.postTitle || "إعلان"}`,
+          message: `لديك رسالة جديدة بخصوص: ${
+            chat?.postTitle || "إعلان"
+          }`,
           link: `/chat/${chatId}`,
           type: "chat",
         });
       }
 
       setText("");
+
       loadMessages();
     } catch (error) {
       console.error(error);
+
       alert("حدث خطأ أثناء إرسال الرسالة");
     } finally {
       setSending(false);
@@ -226,6 +249,11 @@ export default function ChatPage() {
       ? chat?.buyerName || "المشتري"
       : chat?.sellerName || "البائع";
 
+  const otherUserId =
+    userId === chat?.sellerId
+      ? chat?.buyerId
+      : chat?.sellerId;
+
   if (checkingUser) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100">
@@ -238,7 +266,9 @@ export default function ChatPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100">
         <div className="rounded-3xl bg-white p-8 text-center shadow">
-          <h1 className="text-2xl font-black text-red-600">🚫 حسابك محظور</h1>
+          <h1 className="text-2xl font-black text-red-600">
+            🚫 حسابك محظور
+          </h1>
         </div>
       </main>
     );
@@ -247,18 +277,34 @@ export default function ChatPage() {
   return (
     <main className="min-h-screen bg-slate-100 p-4 md:p-6">
       <div className="mx-auto flex h-[calc(100vh-120px)] max-w-4xl flex-col overflow-hidden rounded-3xl bg-white shadow-xl">
+
         <div className="flex items-center justify-between border-b bg-slate-950 p-4 text-white">
           <div>
-            <h1 className="text-xl font-black">💬 {otherName}</h1>
+            <h1 className="text-xl font-black">
+              💬 {otherName}
+            </h1>
+
             <p className="mt-1 text-sm text-slate-300">
               {chat?.postTitle || "إعلان"}
             </p>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+
+            <button
+              onClick={() =>
+                router.push(`/review/${chatId}`)
+              }
+              className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-bold text-black hover:bg-yellow-300"
+            >
+              ⭐ تقييم الطرف الآخر
+            </button>
+
             {chat?.postId && (
               <button
-                onClick={() => router.push(`/post/${chat.postId}`)}
+                onClick={() =>
+                  router.push(`/post/${chat.postId}`)
+                }
                 className="rounded-xl bg-blue-500 px-4 py-2 text-sm font-bold text-white hover:bg-blue-600"
               >
                 الإعلان
@@ -271,16 +317,19 @@ export default function ChatPage() {
             >
               الرسائل
             </button>
+
           </div>
         </div>
 
         <div className="flex-1 space-y-3 overflow-y-auto bg-slate-100 p-4">
+
           {messages.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <div className="rounded-3xl bg-white p-6 text-center shadow">
                 <p className="text-lg font-black text-slate-800">
                   لا توجد رسائل بعد
                 </p>
+
                 <p className="mt-2 text-sm text-slate-500">
                   ابدأ المحادثة الآن.
                 </p>
@@ -293,7 +342,9 @@ export default function ChatPage() {
               return (
                 <div
                   key={msg.id}
-                  className={`flex ${mine ? "justify-end" : "justify-start"}`}
+                  className={`flex ${
+                    mine ? "justify-end" : "justify-start"
+                  }`}
                 >
                   <div
                     className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm leading-7 shadow-sm ${
@@ -304,7 +355,9 @@ export default function ChatPage() {
                   >
                     <p
                       className={`mb-1 text-xs font-black ${
-                        mine ? "text-green-100" : "text-slate-500"
+                        mine
+                          ? "text-green-100"
+                          : "text-slate-500"
                       }`}
                     >
                       {msg.senderName || "مستخدم"}
@@ -314,11 +367,20 @@ export default function ChatPage() {
 
                     <div
                       className={`mt-1 flex items-center gap-2 text-[11px] ${
-                        mine ? "text-green-50" : "text-slate-400"
+                        mine
+                          ? "text-green-50"
+                          : "text-slate-400"
                       }`}
                     >
-                      <span>{formatTime(msg.createdAt)}</span>
-                      {mine && <span>{msg.isRead ? "✓✓" : "✓"}</span>}
+                      <span>
+                        {formatTime(msg.createdAt)}
+                      </span>
+
+                      {mine && (
+                        <span>
+                          {msg.isRead ? "✓✓" : "✓"}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -331,11 +393,14 @@ export default function ChatPage() {
 
         <div className="border-t bg-white p-4">
           <div className="flex gap-2">
+
             <input
               value={text}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") sendMessage();
+                if (e.key === "Enter") {
+                  sendMessage();
+                }
               }}
               placeholder="اكتب رسالة..."
               className="flex-1 rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500"
@@ -348,6 +413,7 @@ export default function ChatPage() {
             >
               {sending ? "..." : "إرسال"}
             </button>
+
           </div>
         </div>
       </div>
