@@ -2,9 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
-import { collection, doc, getDoc, getDocs } from "firebase/firestore";
-import { auth, db } from "../../../lib/firebase";
+import { supabase } from "../../../lib/supabase";
 
 export default function AdminFinancePage() {
   const router = useRouter();
@@ -14,44 +12,75 @@ export default function AdminFinancePage() {
   const [requests, setRequests] = useState<any[]>([]);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    checkAdminAndLoad();
+  }, []);
+
+  const checkAdminAndLoad = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) {
         router.push("/login");
         return;
       }
 
-      const userSnap = await getDoc(doc(db, "users", user.uid));
+      const { data: profile } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", user.id)
+        .single();
 
-      if (!userSnap.exists() || userSnap.data().isAdmin !== true) {
+      if (!profile || profile.isAdmin !== true) {
         setAllowed(false);
         setLoading(false);
         return;
       }
 
       setAllowed(true);
-      await loadRequests();
-      setLoading(false);
-    });
 
-    return () => unsub();
-  }, [router]);
+      await loadRequests();
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء التحقق من الإدارة");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadRequests = async () => {
-    const snap = await getDocs(collection(db, "boostRequests"));
+    try {
+      const { data, error } = await supabase
+        .from("boostRequests")
+        .select("*")
+        .order("createdAt", {
+          ascending: false,
+        });
 
-    const data = snap.docs.map((item) => ({
-      id: item.id,
-      ...item.data(),
-    }));
+      if (error) {
+        console.error(error);
+        return;
+      }
 
-    data.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-    setRequests(data);
+      setRequests(data || []);
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const stats = useMemo(() => {
-    const approved = requests.filter((r) => r.status === "approved");
-    const pending = requests.filter((r) => r.status === "pending");
-    const rejected = requests.filter((r) => r.status === "rejected");
+    const approved = requests.filter(
+      (r) => r.status === "approved"
+    );
+
+    const pending = requests.filter(
+      (r) => r.status === "pending"
+    );
+
+    const rejected = requests.filter(
+      (r) => r.status === "rejected"
+    );
 
     const totalRevenue = approved.reduce(
       (sum, r) => sum + Number(r.price || 0),
@@ -92,8 +121,12 @@ export default function AdminFinancePage() {
   };
 
   const statusClass = (status?: string) => {
-    if (status === "approved") return "bg-green-100 text-green-700";
-    if (status === "rejected") return "bg-red-100 text-red-700";
+    if (status === "approved")
+      return "bg-green-100 text-green-700";
+
+    if (status === "rejected")
+      return "bg-red-100 text-red-700";
+
     return "bg-yellow-100 text-yellow-700";
   };
 
@@ -109,8 +142,13 @@ export default function AdminFinancePage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100">
         <div className="rounded-3xl bg-white p-8 text-center shadow">
-          <h1 className="text-2xl font-black text-red-600">غير مصرح</h1>
-          <p className="mt-2 text-slate-500">هذه الصفحة مخصصة للإدارة فقط.</p>
+          <h1 className="text-2xl font-black text-red-600">
+            غير مصرح
+          </h1>
+
+          <p className="mt-2 text-slate-500">
+            هذه الصفحة مخصصة للإدارة فقط.
+          </p>
         </div>
       </main>
     );
@@ -119,18 +157,24 @@ export default function AdminFinancePage() {
   return (
     <main className="min-h-screen bg-slate-100 p-4 md:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
+
         <section className="rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
-          <h1 className="text-3xl font-black">💰 لوحة الأرباح</h1>
+          <h1 className="text-3xl font-black">
+            💰 لوحة الأرباح
+          </h1>
+
           <p className="mt-2 text-slate-300">
             متابعة أرباح الترويج وطلبات الدفع اليدوي.
           </p>
         </section>
 
         <section className="grid gap-4 md:grid-cols-4">
+
           <div className="rounded-3xl bg-white p-5 text-center shadow">
             <p className="text-3xl font-black text-green-600">
               ${stats.totalRevenue}
             </p>
+
             <p className="mt-1 text-sm font-bold text-slate-500">
               الأرباح المؤكدة
             </p>
@@ -140,6 +184,7 @@ export default function AdminFinancePage() {
             <p className="text-3xl font-black text-orange-500">
               ${stats.pendingRevenue}
             </p>
+
             <p className="mt-1 text-sm font-bold text-slate-500">
               مبالغ قيد المراجعة
             </p>
@@ -149,6 +194,7 @@ export default function AdminFinancePage() {
             <p className="text-3xl font-black text-blue-600">
               {stats.approvedCount}
             </p>
+
             <p className="mt-1 text-sm font-bold text-slate-500">
               طلبات مقبولة
             </p>
@@ -158,17 +204,21 @@ export default function AdminFinancePage() {
             <p className="text-3xl font-black text-slate-900">
               {stats.totalCount}
             </p>
+
             <p className="mt-1 text-sm font-bold text-slate-500">
               إجمالي الطلبات
             </p>
           </div>
+
         </section>
 
         <section className="grid gap-4 md:grid-cols-3">
+
           <div className="rounded-3xl bg-white p-5 text-center shadow">
             <p className="text-2xl font-black text-yellow-600">
               {stats.pendingCount}
             </p>
+
             <p className="mt-1 text-sm font-bold text-slate-500">
               قيد المراجعة
             </p>
@@ -178,27 +228,41 @@ export default function AdminFinancePage() {
             <p className="text-2xl font-black text-green-600">
               {stats.approvedCount}
             </p>
-            <p className="mt-1 text-sm font-bold text-slate-500">مقبولة</p>
+
+            <p className="mt-1 text-sm font-bold text-slate-500">
+              مقبولة
+            </p>
           </div>
 
           <div className="rounded-3xl bg-white p-5 text-center shadow">
             <p className="text-2xl font-black text-red-600">
               {stats.rejectedCount}
             </p>
-            <p className="mt-1 text-sm font-bold text-slate-500">مرفوضة</p>
+
+            <p className="mt-1 text-sm font-bold text-slate-500">
+              مرفوضة
+            </p>
           </div>
+
         </section>
 
         <section className="rounded-3xl bg-white p-5 shadow">
+
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-2xl font-black">سجل طلبات الترويج</h2>
+
+            <h2 className="text-2xl font-black">
+              سجل طلبات الترويج
+            </h2>
 
             <button
-              onClick={() => router.push("/admin/boosts")}
+              onClick={() =>
+                router.push("/admin/boosts")
+              }
               className="rounded-xl bg-orange-500 px-4 py-2 font-bold text-white hover:bg-orange-600"
             >
               طلبات الترويج
             </button>
+
           </div>
 
           {requests.length === 0 ? (
@@ -207,7 +271,9 @@ export default function AdminFinancePage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
+
               <table className="w-full min-w-[900px] border-collapse text-right text-sm">
+
                 <thead>
                   <tr className="border-b bg-slate-50 text-slate-600">
                     <th className="p-3">الإعلان</th>
@@ -222,8 +288,13 @@ export default function AdminFinancePage() {
                 </thead>
 
                 <tbody>
+
                   {requests.map((req) => (
-                    <tr key={req.id} className="border-b hover:bg-slate-50">
+                    <tr
+                      key={req.id}
+                      className="border-b hover:bg-slate-50"
+                    >
+
                       <td className="p-3 font-bold text-slate-900">
                         {req.postTitle || "بدون عنوان"}
                       </td>
@@ -245,6 +316,7 @@ export default function AdminFinancePage() {
                       </td>
 
                       <td className="p-3">
+
                         <span
                           className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(
                             req.status
@@ -252,6 +324,7 @@ export default function AdminFinancePage() {
                         >
                           {statusLabel(req.status)}
                         </span>
+
                       </td>
 
                       <td className="p-3 text-slate-500">
@@ -259,17 +332,23 @@ export default function AdminFinancePage() {
                       </td>
 
                       <td className="p-3">
+
                         <button
-                          onClick={() => router.push(`/post/${req.postId}`)}
+                          onClick={() =>
+                            router.push(`/post/${req.postId}`)
+                          }
                           className="rounded-xl bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-slate-800"
                         >
                           فتح الإعلان
                         </button>
+
                       </td>
                     </tr>
                   ))}
+
                 </tbody>
               </table>
+
             </div>
           )}
         </section>
