@@ -196,28 +196,31 @@ export default function CreatePostPage() {
     }
   };
 
-  const uploadImages = async () => {
-    const urls: string[] = [];
+ const uploadImages = async () => {
+  const urls: string[] = [];
 
-    for (const image of images) {
-      const formData = new FormData();
-      formData.append("image", image);
+  for (const image of images) {
+    const fileExt = image.name.split(".").pop();
+    const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
+    const filePath = `posts/${fileName}`;
 
-      const res = await fetch("http://samedical.online/upload.php", {
-        method: "POST",
-        body: formData,
-      });
+    const { error } = await supabase.storage
+      .from("post-images")
+      .upload(filePath, image);
 
-      const data = await res.json();
-
-      if (data.error) throw new Error(data.error);
-
-      urls.push(data.url);
+    if (error) {
+      throw new Error(error.message);
     }
 
-    return urls;
-  };
+    const { data } = supabase.storage
+      .from("post-images")
+      .getPublicUrl(filePath);
 
+    urls.push(data.publicUrl);
+  }
+
+  return urls;
+};
   const handleSubmit = async () => {
     try {
       if (!currentUser) {
