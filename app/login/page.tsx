@@ -87,22 +87,25 @@ router.refresh();
         >
           {loading ? "جاري الدخول..." : "دخول"}
         </button>
-         <button
-  onClick={() => (window.location.href = "/forgot-password")}
-  className="mt-3 text-sm font-bold text-green-600 hover:underline"
->
-  نسيت كلمة المرور؟
-</button>
-        <button
-          onClick={() =>
-            router.push(
-              `/register?redirect=${redirect}${action ? `&action=${action}` : ""}`
-            )
-          }
-          className="mt-3 w-full rounded-xl bg-slate-900 py-3 font-bold text-white hover:bg-slate-800"
-        >
-          إنشاء حساب
-        </button>
+         <div className="mt-4 flex items-center justify-between text-sm font-bold">
+  <button
+    onClick={() => (window.location.href = "/forgot-password")}
+    className="text-green-600 hover:underline"
+  >
+    نسيت كلمة المرور؟
+  </button>
+
+  <button
+    onClick={() =>
+      router.push(
+        `/register?redirect=${redirect}${action ? `&action=${action}` : ""}`
+      )
+    }
+    className="text-slate-700 hover:text-green-600 hover:underline"
+  >
+    إنشاء حساب جديد
+  </button>
+</div>
       </div>
     </main>
   );
