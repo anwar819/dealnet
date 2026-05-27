@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { auth, db } from "../../../lib/firebase";
+import { auth } from "../../../lib/firebase";
+import { supabase } from "../../../lib/supabase";
 
 export default function PostDetailsPage() {
   const { id } = useParams();
@@ -44,28 +44,33 @@ export default function PostDetailsPage() {
     try {
       setLoading(true);
 
-      const ref = doc(db, "posts", id as string);
-      const snap = await getDoc(ref);
+      const { data, error } = await supabase
+        .from("posts")
+        .select("*")
+        .eq("id", id)
+        .single();
 
-      if (!snap.exists()) {
+      if (error || !data) {
         alert("الإعلان غير موجود");
         router.push("/marketplace");
         return;
       }
 
-      const data: any = snap.data();
-
-      const fullPost = {
-        id: snap.id,
-        ...data,
-      };
-
-      setPost(fullPost);
+      setPost(data);
 
       const imgs =
-        data.imageUrls || data.images || (data.imageUrl ? [data.imageUrl] : []);
+        data.imageUrls ||
+        data.images ||
+        (data.imageUrl ? [data.imageUrl] : []);
 
-      setImages(imgs);
+      setImages(imgs || []);
+
+      await supabase
+        .from("posts")
+        .update({
+          views: (data.views || 0) + 1,
+        })
+        .eq("id", id);
     } catch (error) {
       console.error("خطأ تحميل الإعلان:", error);
       alert("فشل تحميل الإعلان");
@@ -121,12 +126,14 @@ export default function PostDetailsPage() {
     const sellerId = post.userId;
 
     const chatId =
-      userId < sellerId ? `${userId}_${sellerId}` : `${sellerId}_${userId}`;
+      userId < sellerId
+        ? `${userId}_${sellerId}`
+        : `${sellerId}_${userId}`;
 
     try {
-      await setDoc(
-        doc(db, "chats", chatId),
-        {
+      const { error } = await supabase
+        .from("chats")
+        .upsert({
           chatId,
           users: [userId, sellerId],
           postId: post.id,
@@ -137,9 +144,13 @@ export default function PostDetailsPage() {
           buyerName: "مستخدم",
           lastMessage: "",
           updatedAt: Date.now(),
-        },
-        { merge: true }
-      );
+        });
+
+      if (error) {
+        console.error(error);
+        alert("فشل إنشاء المحادثة");
+        return;
+      }
 
       router.push(`/chat/${chatId}`);
     } catch (error) {
@@ -183,6 +194,7 @@ export default function PostDetailsPage() {
   return (
     <main className="min-h-screen bg-slate-100 p-4 md:p-6">
       <div className="mx-auto max-w-6xl space-y-6">
+
         <section className="rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
           <p className="mb-2 text-sm font-bold text-green-400">
             تفاصيل الإعلان
@@ -204,8 +216,10 @@ export default function PostDetailsPage() {
         </section>
 
         <section className="grid gap-6 lg:grid-cols-3">
+
           <div className="lg:col-span-2">
             <div className="overflow-hidden rounded-3xl bg-white p-4 shadow">
+
               <div className="flex h-[420px] items-center justify-center overflow-hidden rounded-2xl bg-slate-200">
                 {mainImage ? (
                   <img
@@ -243,7 +257,9 @@ export default function PostDetailsPage() {
           </div>
 
           <aside className="space-y-4">
+
             <div className="rounded-3xl bg-white p-6 shadow">
+
               <p className="text-4xl font-black text-green-600">
                 {post.price ? `$${post.price}` : "حسب الاتفاق"}
               </p>
@@ -257,6 +273,7 @@ export default function PostDetailsPage() {
               </p>
 
               <div className="mt-6 grid gap-3">
+
                 <button
                   onClick={openWhatsApp}
                   className="w-full rounded-xl bg-green-500 py-3 font-bold text-white hover:bg-green-600"
@@ -270,12 +287,15 @@ export default function PostDetailsPage() {
                 >
                   مراسلة داخل الموقع
                 </button>
+
               </div>
             </div>
 
             {userId === post.userId && (
               <div className="rounded-3xl bg-white p-6 shadow">
+
                 <div className="grid gap-3">
+
                   <button
                     onClick={() => router.push(`/boost/${post.id}`)}
                     className="w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600"
@@ -289,6 +309,7 @@ export default function PostDetailsPage() {
                   >
                     تعديل الإعلان
                   </button>
+
                 </div>
               </div>
             )}
@@ -304,9 +325,12 @@ export default function PostDetailsPage() {
         </section>
 
         <section className="rounded-3xl bg-white p-6 shadow">
-          <h2 className="mb-4 text-2xl font-black">معلومات الإعلان</h2>
+          <h2 className="mb-4 text-2xl font-black">
+            معلومات الإعلان
+          </h2>
 
           <div className="grid gap-3 text-slate-700 md:grid-cols-2">
+
             <p>
               <b>النوع:</b> {getTypeLabel(post.type)}
             </p>
@@ -322,6 +346,7 @@ export default function PostDetailsPage() {
             <p>
               <b>الموقع:</b> {post.location || "غير محدد"}
             </p>
+
           </div>
         </section>
 
@@ -331,11 +356,14 @@ export default function PostDetailsPage() {
         >
           الرجوع للسوق
         </button>
+
       </div>
 
       {showLoginBox && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 px-4">
+
           <div className="w-full max-w-md rounded-3xl bg-white p-6 text-center shadow-2xl">
+
             <h2 className="text-2xl font-black text-slate-900">
               تسجيل الدخول مطلوب
             </h2>
@@ -345,6 +373,7 @@ export default function PostDetailsPage() {
             </p>
 
             <div className="mt-6 grid gap-3">
+
               <button
                 onClick={() =>
                   router.push(`/login?redirect=/post/${post.id}&action=chat`)
@@ -369,6 +398,7 @@ export default function PostDetailsPage() {
               >
                 إلغاء
               </button>
+
             </div>
           </div>
         </div>
