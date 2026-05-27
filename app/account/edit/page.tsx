@@ -1,9 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { auth, db } from "../../../lib/firebase";
-import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { supabase } from "../../../lib/supabase";
 
 export default function EditAccountPage() {
   const [userId, setUserId] = useState("");
@@ -17,35 +15,45 @@ export default function EditAccountPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    loadAccount();
+  }, []);
+
+  const loadAccount = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) {
-        window.location.href = "/login";
+        window.location.href = "/login?redirect=/account/edit";
         return;
       }
 
-      setUserId(user.uid);
+      setUserId(user.id);
       setEmail(user.email || "");
 
-      try {
-        const ref = doc(db, "users", user.uid);
-        const snap = await getDoc(ref);
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", user.id)
+        .single();
 
-        if (snap.exists()) {
-          const data = snap.data();
-          setFirstName(data.firstName || "");
-          setLastName(data.lastName || "");
-          setPhone(data.phone || "");
-        }
-      } catch (error) {
+      if (error) {
         console.error(error);
-        alert("حدث خطأ أثناء تحميل بيانات الحساب");
-      } finally {
-        setLoading(false);
       }
-    });
 
-    return () => unsub();
-  }, []);
+      if (data) {
+        setFirstName(data.firstName || "");
+        setLastName(data.lastName || "");
+        setPhone(data.phone || "");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء تحميل بيانات الحساب");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSave = async () => {
     if (!userId) return;
@@ -63,17 +71,20 @@ export default function EditAccountPage() {
     try {
       setSaving(true);
 
-      await setDoc(
-        doc(db, "users", userId),
-        {
-          firstName,
-          lastName,
-          phone,
-          email,
-          updatedAt: Date.now(),
-        },
-        { merge: true }
-      );
+      const { error } = await supabase.from("users").upsert({
+        id: userId,
+        firstName: firstName.trim(),
+        lastName: lastName.trim(),
+        phone: phone.trim(),
+        email,
+        updatedAt: Date.now(),
+      });
+
+      if (error) {
+        console.error(error);
+        alert("حدث خطأ أثناء حفظ البيانات");
+        return;
+      }
 
       alert("تم حفظ بيانات الحساب");
       window.location.href = "/account";
@@ -103,6 +114,7 @@ export default function EditAccountPage() {
             <label className="mb-2 block text-sm font-bold text-slate-700">
               الاسم
             </label>
+
             <input
               value={firstName}
               onChange={(e) => setFirstName(e.target.value)}
@@ -115,6 +127,7 @@ export default function EditAccountPage() {
             <label className="mb-2 block text-sm font-bold text-slate-700">
               اللقب
             </label>
+
             <input
               value={lastName}
               onChange={(e) => setLastName(e.target.value)}
@@ -127,6 +140,7 @@ export default function EditAccountPage() {
             <label className="mb-2 block text-sm font-bold text-slate-700">
               رقم الهاتف / واتساب
             </label>
+
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
@@ -139,6 +153,7 @@ export default function EditAccountPage() {
             <label className="mb-2 block text-sm font-bold text-slate-700">
               البريد الإلكتروني
             </label>
+
             <input
               value={email}
               disabled
