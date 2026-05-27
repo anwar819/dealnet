@@ -2,15 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { onAuthStateChanged } from "firebase/auth";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  updateDoc,
-} from "firebase/firestore";
-import { auth, db } from "../../../lib/firebase";
+import { supabase } from "../../../lib/supabase";
 
 export default function AdminBoostsPage() {
   const router = useRouter();
@@ -20,75 +12,143 @@ export default function AdminBoostsPage() {
   const [requests, setRequests] = useState<any[]>([]);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (user) => {
+    checkAdminAndLoad();
+  }, []);
+
+  const checkAdminAndLoad = async () => {
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user) {
         router.push("/login");
         return;
       }
 
-      const userSnap = await getDoc(doc(db, "users", user.uid));
+      const { data: profile } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", user.id)
+        .single();
 
-      if (!userSnap.exists() || userSnap.data().isAdmin !== true) {
+      if (!profile || profile.isAdmin !== true) {
         setAllowed(false);
         setLoading(false);
         return;
       }
 
       setAllowed(true);
-      await loadRequests();
-      setLoading(false);
-    });
 
-    return () => unsub();
-  }, [router]);
+      await loadRequests();
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء التحقق من الإدارة");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadRequests = async () => {
-    const snap = await getDocs(collection(db, "boostRequests"));
+    try {
+      const { data, error } = await supabase
+        .from("boostRequests")
+        .select("*")
+        .order("createdAt", {
+          ascending: false,
+        });
 
-    const data = snap.docs.map((item) => ({
-      id: item.id,
-      ...item.data(),
-    }));
+      if (error) {
+        console.error(error);
+        return;
+      }
 
-    data.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-
-    setRequests(data);
+      setRequests(data || []);
+    } catch (error) {
+      console.error(error);
+    }
   };
 
   const approveRequest = async (req: any) => {
     if (!confirm("هل تريد قبول طلب الترويج وتفعيل الإعلان؟")) return;
 
-    const now = Date.now();
-    const expiresAt = now + Number(req.days || 3) * 24 * 60 * 60 * 1000;
+    try {
+      const now = Date.now();
 
-    await updateDoc(doc(db, "posts", req.postId), {
-      isBoosted: true,
-      isHidden: false,
-      boostedAt: now,
-      boostExpiresAt: expiresAt,
-      createdAt: now,
-    });
+      const expiresAt =
+        now +
+        Number(req.days || 3) *
+          24 *
+          60 *
+          60 *
+          1000;
 
-    await updateDoc(doc(db, "boostRequests", req.id), {
-      status: "approved",
-      approvedAt: now,
-      boostExpiresAt: expiresAt,
-    });
+      const { error: postError } = await supabase
+        .from("posts")
+        .update({
+          isBoosted: true,
+          isHidden: false,
+          boostedAt: now,
+          boostExpiresAt: expiresAt,
+          createdAt: now,
+        })
+        .eq("id", req.postId);
 
-    alert("تم قبول الطلب وتفعيل الترويج 🔥");
-    await loadRequests();
+      if (postError) {
+        console.error(postError);
+        alert("فشل تفعيل الترويج");
+        return;
+      }
+
+      const { error: requestError } = await supabase
+        .from("boostRequests")
+        .update({
+          status: "approved",
+          approvedAt: now,
+          boostExpiresAt: expiresAt,
+        })
+        .eq("id", req.id);
+
+      if (requestError) {
+        console.error(requestError);
+        alert("فشل تحديث الطلب");
+        return;
+      }
+
+      alert("تم قبول الطلب وتفعيل الترويج 🔥");
+
+      await loadRequests();
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء قبول الطلب");
+    }
   };
 
   const rejectRequest = async (req: any) => {
     if (!confirm("هل تريد رفض طلب الترويج؟")) return;
 
-    await updateDoc(doc(db, "boostRequests", req.id), {
-      status: "rejected",
-      rejectedAt: Date.now(),
-    });
+    try {
+      const { error } = await supabase
+        .from("boostRequests")
+        .update({
+          status: "rejected",
+          rejectedAt: Date.now(),
+        })
+        .eq("id", req.id);
 
-    alert("تم رفض الطلب");
-    await loadRequests();
+      if (error) {
+        console.error(error);
+        alert("فشل رفض الطلب");
+        return;
+      }
+
+      alert("تم رفض الطلب");
+
+      await loadRequests();
+    } catch (error) {
+      console.error(error);
+      alert("حدث خطأ أثناء رفض الطلب");
+    }
   };
 
   const formatDate = (value?: number) => {
@@ -115,7 +175,10 @@ export default function AdminBoostsPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100">
         <div className="rounded-3xl bg-white p-8 text-center shadow">
-          <h1 className="text-2xl font-black text-red-600">غير مصرح</h1>
+          <h1 className="text-2xl font-black text-red-600">
+            غير مصرح
+          </h1>
+
           <p className="mt-2 text-slate-500">
             هذه الصفحة مخصصة للإدارة فقط.
           </p>
@@ -127,8 +190,12 @@ export default function AdminBoostsPage() {
   return (
     <main className="min-h-screen bg-slate-100 p-4 md:p-6">
       <div className="mx-auto max-w-6xl">
+
         <section className="mb-6 rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
-          <h1 className="text-3xl font-black">🔥 طلبات الترويج</h1>
+          <h1 className="text-3xl font-black">
+            🔥 طلبات الترويج
+          </h1>
+
           <p className="mt-2 text-slate-300">
             راجع طلبات الترويج وفعّلها بعد تأكيد الدفع.
           </p>
@@ -142,9 +209,15 @@ export default function AdminBoostsPage() {
           </div>
         ) : (
           <div className="space-y-4">
+
             {requests.map((req) => (
-              <div key={req.id} className="rounded-3xl bg-white p-5 shadow">
+              <div
+                key={req.id}
+                className="rounded-3xl bg-white p-5 shadow"
+              >
+
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+
                   <div>
                     <h2 className="text-xl font-black text-slate-900">
                       {req.postTitle || "إعلان بدون عنوان"}
@@ -174,9 +247,11 @@ export default function AdminBoostsPage() {
                       ? "مرفوض"
                       : "قيد المراجعة"}
                   </span>
+
                 </div>
 
                 <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 text-sm md:grid-cols-2">
+
                   <p>
                     <b>الباقة:</b> {req.packageTitle}
                   </p>
@@ -192,24 +267,38 @@ export default function AdminBoostsPage() {
                   <p>
                     <b>طريقة الدفع:</b> {req.paymentMethod}
                   </p>
+
                 </div>
 
                 {req.paymentNote && (
                   <div className="mt-4 rounded-2xl bg-orange-50 p-4 text-sm text-orange-900">
-                    <p className="font-black">ملاحظة الدفع:</p>
-                    <p className="mt-2">{req.paymentNote}</p>
+
+                    <p className="font-black">
+                      ملاحظة الدفع:
+                    </p>
+
+                    <p className="mt-2">
+                      {req.paymentNote}
+                    </p>
+
                   </div>
                 )}
 
                 {req.status === "approved" && (
                   <div className="mt-4 rounded-2xl bg-green-50 p-4 text-sm text-green-800">
-                    <b>ينتهي الترويج:</b> {formatDate(req.boostExpiresAt)}
+
+                    <b>ينتهي الترويج:</b>{" "}
+                    {formatDate(req.boostExpiresAt)}
+
                   </div>
                 )}
 
                 <div className="mt-5 flex flex-wrap gap-3">
+
                   <button
-                    onClick={() => router.push(`/post/${req.postId}`)}
+                    onClick={() =>
+                      router.push(`/post/${req.postId}`)
+                    }
                     className="rounded-xl bg-blue-500 px-4 py-2 font-bold text-white hover:bg-blue-600"
                   >
                     فتح الإعلان
@@ -218,23 +307,29 @@ export default function AdminBoostsPage() {
                   {req.status === "pending" && (
                     <>
                       <button
-                        onClick={() => approveRequest(req)}
+                        onClick={() =>
+                          approveRequest(req)
+                        }
                         className="rounded-xl bg-green-500 px-4 py-2 font-bold text-white hover:bg-green-600"
                       >
                         قبول وتفعيل
                       </button>
 
                       <button
-                        onClick={() => rejectRequest(req)}
+                        onClick={() =>
+                          rejectRequest(req)
+                        }
                         className="rounded-xl bg-red-500 px-4 py-2 font-bold text-white hover:bg-red-600"
                       >
                         رفض
                       </button>
                     </>
                   )}
+
                 </div>
               </div>
             ))}
+
           </div>
         )}
       </div>
