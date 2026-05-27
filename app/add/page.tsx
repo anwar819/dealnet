@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { db, auth } from "@/lib/firebase";
-import { collection, addDoc, doc, getDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 export default function AddPostPage() {
   const [title, setTitle] = useState("");
@@ -11,44 +10,79 @@ export default function AddPostPage() {
   const [description, setDescription] = useState("");
   const [location, setLocation] = useState("");
   const [type, setType] = useState("sell");
+  const [loading, setLoading] = useState(false);
 
   const router = useRouter();
 
   const handleSubmit = async () => {
     try {
-      if (!auth.currentUser) {
+      if (!title.trim()) return alert("اكتب عنوان الإعلان");
+      if (!description.trim()) return alert("اكتب وصف الإعلان");
+      if (!location.trim()) return alert("اكتب الموقع");
+
+      setLoading(true);
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
         alert("يجب تسجيل الدخول أولاً");
+        router.push("/login?redirect=/add");
         return;
       }
 
-      const user = auth.currentUser;
+      const { data: profile } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", user.id)
+        .single();
 
-      const userDoc = await getDoc(doc(db, "users", user.uid));
+      if (profile?.isBlocked) {
+        alert("🚫 تم حظر حسابك");
+        return;
+      }
 
       let userName = "مستخدم";
 
-      if (userDoc.exists()) {
-        const data = userDoc.data();
-        userName = `${data.firstName || ""} ${data.lastName || ""}`.trim();
+      if (profile) {
+        userName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim();
         if (!userName) userName = "مستخدم";
       }
 
-      await addDoc(collection(db, "posts"), {
-        title,
-        price,
-        description,
-        location,
+      const { error } = await supabase.from("posts").insert({
+        title: title.trim(),
+        price: price.trim(),
+        description: description.trim(),
+        desc: description.trim(),
+        location: location.trim(),
+        city: location.trim(),
         type,
-        userId: user.uid,
+        userId: user.id,
         userName,
+        views: 0,
+        isFeatured: false,
+        isBoosted: false,
+        isHidden: false,
+        boostedAt: null,
+        boostExpiresAt: null,
         createdAt: Date.now(),
+        updatedAt: Date.now(),
       });
+
+      if (error) {
+        console.error(error);
+        alert("فشل إضافة الإعلان");
+        return;
+      }
 
       alert("تم إضافة الإعلان");
       router.push("/marketplace");
     } catch (error: any) {
       console.error(error);
-      alert(error.message);
+      alert(error.message || "حدث خطأ أثناء إضافة الإعلان");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -103,9 +137,10 @@ export default function AddPostPage() {
 
         <button
           onClick={handleSubmit}
-          className="w-full rounded bg-green-600 p-3 text-white hover:bg-green-700"
+          disabled={loading}
+          className="w-full rounded bg-green-600 p-3 text-white hover:bg-green-700 disabled:opacity-60"
         >
-          نشر الإعلان
+          {loading ? "جاري النشر..." : "نشر الإعلان"}
         </button>
       </div>
     </main>
