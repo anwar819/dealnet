@@ -5,126 +5,64 @@ import { supabase } from "../../lib/supabase";
 import Header from "./Header";
 import Sidebar from "./Sidebar";
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+export default function AppShell({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hasUser, setHasUser] = useState(false);
-  useEffect(() => {
-  const handleLogout = () => {
-    setHasUser(false);
-    setSidebarOpen(false);
-  };
-
-  window.addEventListener("dealnet-logout", handleLogout);
-
-  return () => {
-    window.removeEventListener("dealnet-logout", handleLogout);
-  };
-}, []);
-  const [authReady, setAuthReady] = useState(false);
-
-  const setUserOnline = async (userId: string) => {
-    await supabase
-      .from("users")
-      .update({
-        isOnline: true,
-        lastSeen: Date.now(),
-        updatedAt: Date.now(),
-      })
-      .eq("id", userId);
-  };
-
-  const setUserOffline = async (userId: string) => {
-    await supabase
-      .from("users")
-      .update({
-        isOnline: false,
-        lastSeen: Date.now(),
-        updatedAt: Date.now(),
-      })
-      .eq("id", userId);
-  };
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    let currentUserId = "";
-
-    const initAuth = async () => {
+    const loadSession = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
-      const user = session?.user;
+      const loggedIn = !!session?.user;
 
-      if (user) {
-        currentUserId = user.id;
-        setHasUser(true);
-        await setUserOnline(user.id);
-      } else {
-        currentUserId = "";
-        setHasUser(false);
-      }
-
-      setAuthReady(true);
+      setHasUser(loggedIn);
+      setSidebarOpen(loggedIn);
+      setReady(true);
     };
 
-    initAuth();
-
-    const heartbeat = setInterval(async () => {
-      if (currentUserId) {
-        await setUserOnline(currentUserId);
-      }
-    }, 30000);
+    loadSession();
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      const user = session?.user;
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const loggedIn = !!session?.user;
 
-      if (event === "SIGNED_OUT" || !user) {
-        if (currentUserId) {
-          await setUserOffline(currentUserId);
-        }
-
-        currentUserId = "";
-        setHasUser(false);
-        setAuthReady(true);
-        return;
-      }
-
-      currentUserId = user.id;
-      setHasUser(true);
-      setAuthReady(true);
-      await setUserOnline(user.id);
+      setHasUser(loggedIn);
+      setSidebarOpen(loggedIn);
     });
 
     return () => {
-      clearInterval(heartbeat);
       subscription.unsubscribe();
     };
   }, []);
 
-  if (!authReady) {
-    return (
-      <>
-        <Header />
-        <main className="pt-4">{children}</main>
-      </>
-    );
-  }
+  if (!ready) return null;
 
   return (
     <>
       <Header />
 
-      {hasUser && <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />}
+      {hasUser && (
+        <Sidebar
+          open={sidebarOpen}
+          setOpen={setSidebarOpen}
+        />
+      )}
 
       <main
-  key={hasUser ? "with-sidebar" : "without-sidebar"}
-  className={`pt-4 transition-all duration-300 ${
-    hasUser && sidebarOpen ? "md:pr-72" : "md:pr-0"
-  }`}
->
-  {children}
-</main>
+        className={`transition-all duration-300 ${
+          hasUser && sidebarOpen ? "md:pr-72" : "md:pr-0"
+        }`}
+      >
+        {children}
+      </main>
     </>
   );
 }
