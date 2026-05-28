@@ -68,6 +68,18 @@ export default function MarketplacePage() {
     loadCurrentUserAndFavorites();
   }, []);
 
+  const getSellerFullName = (post: PostType) => {
+    if (post.seller) {
+      const fullName = `${post.seller.firstName || ""} ${
+        post.seller.lastName || ""
+      }`.trim();
+
+      if (fullName) return fullName;
+    }
+
+    return post.userName || "مستخدم";
+  };
+
   const loadPosts = async () => {
     try {
       setLoading(true);
@@ -178,7 +190,11 @@ export default function MarketplacePage() {
   };
 
   const isActiveBoost = (post: PostType) => {
-    return !!post.isBoosted && !!post.boostExpiresAt && post.boostExpiresAt > Date.now();
+    return (
+      !!post.isBoosted &&
+      !!post.boostExpiresAt &&
+      post.boostExpiresAt > Date.now()
+    );
   };
 
   const getMainImage = (post: PostType) => {
@@ -225,7 +241,10 @@ export default function MarketplacePage() {
     const existing = favorites.find((fav) => fav.postId === postId);
 
     if (existing) {
-      const { error } = await supabase.from("favorites").delete().eq("id", existing.id);
+      const { error } = await supabase
+        .from("favorites")
+        .delete()
+        .eq("id", existing.id);
 
       if (error) {
         console.error(error);
@@ -238,7 +257,10 @@ export default function MarketplacePage() {
       setPosts((prev) =>
         prev.map((post) =>
           post.id === postId
-            ? { ...post, favoriteCount: Math.max((post.favoriteCount || 0) - 1, 0) }
+            ? {
+                ...post,
+                favoriteCount: Math.max((post.favoriteCount || 0) - 1, 0),
+              }
             : post
         )
       );
@@ -311,9 +333,11 @@ export default function MarketplacePage() {
       const postCity = post.location || post.city || "";
       const priceNum = getPriceNumber(post.price);
 
+      const sellerName = getSellerFullName(post);
+
       const text = `${post.title || ""} ${post.desc || ""} ${
         post.description || ""
-      } ${postCity} ${postMain} ${postSub}`.toLowerCase();
+      } ${postCity} ${postMain} ${postSub} ${sellerName}`.toLowerCase();
 
       const matchesSearch = text.includes(search.trim().toLowerCase());
       const matchesMain =
@@ -321,7 +345,8 @@ export default function MarketplacePage() {
       const matchesSub =
         selectedSubCategory === "الكل" || postSub === selectedSubCategory;
       const matchesCity =
-        !city.trim() || postCity.toLowerCase().includes(city.trim().toLowerCase());
+        !city.trim() ||
+        postCity.toLowerCase().includes(city.trim().toLowerCase());
       const matchesMin = !minPrice || priceNum >= Number(minPrice);
       const matchesMax = !maxPrice || priceNum <= Number(maxPrice);
 
@@ -352,10 +377,13 @@ export default function MarketplacePage() {
         return (b.sellerRating || 0) - (a.sellerRating || 0);
       }
 
-      if (sortBy === "low") return getPriceNumber(a.price) - getPriceNumber(b.price);
-      if (sortBy === "high") return getPriceNumber(b.price) - getPriceNumber(a.price);
+      if (sortBy === "low")
+        return getPriceNumber(a.price) - getPriceNumber(b.price);
+      if (sortBy === "high")
+        return getPriceNumber(b.price) - getPriceNumber(a.price);
       if (sortBy === "views") return (b.views || 0) - (a.views || 0);
-      if (sortBy === "favorites") return (b.favoriteCount || 0) - (a.favoriteCount || 0);
+      if (sortBy === "favorites")
+        return (b.favoriteCount || 0) - (a.favoriteCount || 0);
 
       return (b.createdAt || 0) - (a.createdAt || 0);
     });
@@ -373,42 +401,55 @@ export default function MarketplacePage() {
   ]);
 
   return (
-    <main className="min-h-screen bg-slate-100 px-5 py-8">
+    <main className="min-h-screen bg-slate-100 px-4 py-8 md:px-6">
       <div className="mx-auto max-w-7xl">
-        <section className="mb-6 overflow-hidden rounded-3xl bg-gradient-to-l from-slate-950 via-slate-900 to-slate-800 p-7 text-white shadow-xl">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <section className="mb-6 overflow-hidden rounded-[2rem] bg-gradient-to-l from-slate-950 via-slate-900 to-slate-800 p-7 text-white shadow-xl">
+          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="mb-2 text-sm font-bold text-green-400">
+              <p className="mb-2 text-sm font-black text-green-400">
                 DealNet Marketplace
               </p>
-              <h1 className="text-4xl font-black">السوق</h1>
-              <p className="mt-3 text-slate-300">
+
+              <h1 className="text-4xl font-black">
+                السوق
+              </h1>
+
+              <p className="mt-3 max-w-2xl text-slate-300">
                 الإعلانات المروّجة والموثقة تظهر أولًا لزيادة الثقة وفرص البيع.
               </p>
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <a href="/messages" className="rounded-xl bg-white/10 px-4 py-3 text-sm font-bold hover:bg-white/20">
+              <a
+                href="/messages"
+                className="rounded-xl bg-white/10 px-4 py-3 text-sm font-bold hover:bg-white/20"
+              >
                 📩 الرسائل
               </a>
 
-              <a href="/favorites" className="rounded-xl bg-white/10 px-4 py-3 text-sm font-bold hover:bg-white/20">
+              <a
+                href="/favorites"
+                className="rounded-xl bg-white/10 px-4 py-3 text-sm font-bold hover:bg-white/20"
+              >
                 ❤️ المفضلة
               </a>
 
-              <a href="/create-post" className="rounded-xl bg-green-500 px-4 py-3 text-sm font-bold hover:bg-green-600">
+              <a
+                href="/create-post"
+                className="rounded-xl bg-green-500 px-4 py-3 text-sm font-bold hover:bg-green-600"
+              >
                 + نشر إعلان
               </a>
             </div>
           </div>
         </section>
 
-        <section className="mb-6 rounded-3xl bg-white p-5 shadow">
+        <section className="mb-6 rounded-[2rem] bg-white p-5 shadow">
           <div className="grid gap-3 md:grid-cols-6">
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث عن منتج، خدمة، مدينة..."
+              placeholder="ابحث عن منتج، خدمة، مدينة، بائع..."
               className="rounded-xl border border-slate-300 px-4 py-3 outline-none focus:border-green-500 md:col-span-2"
             />
 
@@ -528,6 +569,7 @@ export default function MarketplacePage() {
             <h2 className="text-xl font-black text-slate-900">
               الإعلانات المتاحة
             </h2>
+
             <p className="mt-1 text-sm text-slate-500">
               العدد: {filteredPosts.length}
             </p>
@@ -542,28 +584,34 @@ export default function MarketplacePage() {
         </div>
 
         {loading ? (
-          <div className="rounded-3xl bg-white p-12 text-center text-slate-500 shadow">
-            جاري تحميل الإعلانات...
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((item) => (
+              <div
+                key={item}
+                className="h-[430px] animate-pulse rounded-[2rem] bg-white shadow"
+              />
+            ))}
           </div>
         ) : filteredPosts.length === 0 ? (
-          <div className="rounded-3xl bg-white p-12 text-center shadow">
+          <div className="rounded-[2rem] bg-white p-12 text-center shadow">
             <p className="text-lg font-bold text-slate-800">
               لا توجد نتائج مطابقة
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
             {filteredPosts.map((post) => {
               const mainImage = getMainImage(post);
               const fav = isFavorite(post.id);
               const postMain = post.mainCategory || post.category || "عام";
               const postSub = post.subCategory || "";
               const boosted = isActiveBoost(post);
+              const sellerFullName = getSellerFullName(post);
 
               return (
                 <article
                   key={post.id}
-                  className={`group overflow-hidden rounded-3xl border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl ${
+                  className={`group overflow-hidden rounded-[2rem] border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl ${
                     boosted
                       ? "border-orange-400 ring-2 ring-orange-200"
                       : post.isFeatured
@@ -571,7 +619,7 @@ export default function MarketplacePage() {
                       : "border-slate-200"
                   }`}
                 >
-                  <div className="relative h-52 overflow-hidden bg-slate-200">
+                  <div className="relative h-56 overflow-hidden bg-slate-200">
                     {mainImage ? (
                       <img
                         src={mainImage}
@@ -616,50 +664,46 @@ export default function MarketplacePage() {
                   </div>
 
                   <div className="p-5">
-                    <div className="mb-3 flex items-center justify-between gap-2">
-                      <button
-                        onClick={() => {
-                          if (post.userId) {
-                            window.location.href = `/profile/${post.userId}`;
-                          }
-                        }}
-                        className="flex min-w-0 items-center gap-2 text-right"
-                      >
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-black text-white">
-                          {post?.seller?.firstName
-                            ? post.seller.firstName.charAt(0)
-                            : "U"}
+                    <button
+                      onClick={() => {
+                        if (post.userId) {
+                          window.location.href = `/profile/${post.userId}`;
+                        }
+                      }}
+                      className="mb-4 flex min-w-0 items-center gap-2 text-right"
+                    >
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-black text-white">
+                        {sellerFullName.charAt(0)}
+                      </div>
+
+                      <div className="min-w-0 text-right">
+                        <div className="flex items-center gap-1">
+                          <p className="truncate text-sm font-black text-slate-900">
+                            {sellerFullName}
+                          </p>
+
+                          {post?.seller?.isVerified && (
+                            <span className="rounded-full bg-blue-500 px-2 py-[2px] text-[10px] font-black text-white">
+                              ✔
+                            </span>
+                          )}
+
+                          {post?.seller?.isOnline && (
+                            <span className="text-green-500">🟢</span>
+                          )}
                         </div>
 
-                        <div className="min-w-0 text-right">
-                          <div className="flex items-center gap-1">
-                            <p className="truncate text-sm font-black text-slate-900">
-                              {post?.seller?.firstName || post.userName || "مستخدم"}
-                            </p>
+                        <div className="flex items-center gap-1 text-xs text-slate-500">
+                          <span>
+                            ⭐ {Number(post?.sellerRating || 0).toFixed(1)}
+                          </span>
 
-                            {post?.seller?.isVerified && (
-                              <span className="rounded-full bg-blue-500 px-2 py-[2px] text-[10px] font-black text-white">
-                                ✔
-                              </span>
-                            )}
-
-                            {post?.seller?.isOnline && (
-                              <span className="text-green-500">🟢</span>
-                            )}
-                          </div>
-
-                          <div className="flex items-center gap-1 text-xs text-slate-500">
-                            <span>
-                              ⭐ {Number(post?.sellerRating || 0).toFixed(1)}
-                            </span>
-
-                            <span>
-                              ({post?.sellerReviews || 0})
-                            </span>
-                          </div>
+                          <span>
+                            ({post?.sellerReviews || 0})
+                          </span>
                         </div>
-                      </button>
-                    </div>
+                      </div>
+                    </button>
 
                     <div className="mb-3 flex flex-wrap gap-2">
                       <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
@@ -677,16 +721,16 @@ export default function MarketplacePage() {
                       {post.title || "بدون عنوان"}
                     </h3>
 
-                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-slate-500">
+                    <p className="mt-2 line-clamp-2 min-h-[48px] text-sm leading-6 text-slate-500">
                       {post.desc || post.description || "لا يوجد وصف"}
                     </p>
 
-                    <div className="mt-4 flex items-center justify-between">
-                      <p className="text-xl font-black text-green-600">
+                    <div className="mt-4 flex items-center justify-between gap-3">
+                      <p className="truncate text-xl font-black text-green-600">
                         {post.price ? `$${post.price}` : "حسب الاتفاق"}
                       </p>
 
-                      <p className="text-xs font-bold text-slate-400">
+                      <p className="truncate text-xs font-bold text-slate-400">
                         📍 {post.location || post.city || "غير محدد"}
                       </p>
                     </div>
