@@ -80,17 +80,18 @@ export default function Sidebar({
       setReady(true);
     }
   };
-
- const logout = async () => {
+const logout = async () => {
   try {
     setOpen(false);
     setUser(null);
     setFirstName("");
     setIsAdmin(false);
 
-    await supabase.auth.signOut({ scope: "local" });
+    window.dispatchEvent(new Event("dealnet-logout"));
 
-    window.location.href = `/?logout=${Date.now()}`;
+    await supabase.auth.signOut();
+
+    window.location.replace("/");
   } catch (error) {
     console.error(error);
     alert("فشل تسجيل الخروج");

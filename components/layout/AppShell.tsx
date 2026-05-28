@@ -8,6 +8,18 @@ import Sidebar from "./Sidebar";
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hasUser, setHasUser] = useState(false);
+  useEffect(() => {
+  const handleLogout = () => {
+    setHasUser(false);
+    setSidebarOpen(false);
+  };
+
+  window.addEventListener("dealnet-logout", handleLogout);
+
+  return () => {
+    window.removeEventListener("dealnet-logout", handleLogout);
+  };
+}, []);
   const [authReady, setAuthReady] = useState(false);
 
   const setUserOnline = async (userId: string) => {
