@@ -11,12 +11,13 @@ export default function PostDetailsPage() {
 
   const [userId, setUserId] = useState("");
   const [post, setPost] = useState<any>(null);
+  const [sellerData, setSellerData] = useState<any>(null);
+
   const [images, setImages] = useState<string[]>([]);
   const [activeImage, setActiveImage] = useState(0);
 
   const [sellerRating, setSellerRating] = useState(0);
   const [reviewsCount, setReviewsCount] = useState(0);
-  const [sellerVerified, setSellerVerified] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [showLoginBox, setShowLoginBox] = useState(false);
@@ -39,6 +40,14 @@ export default function PostDetailsPage() {
   const checkUser = async () => {
     const { data } = await supabase.auth.getUser();
     setUserId(data.user?.id || "");
+  };
+
+  const getSellerFullName = () => {
+    const name = `${sellerData?.firstName || ""} ${
+      sellerData?.lastName || ""
+    }`.trim();
+
+    return name || post?.userName || "مستخدم";
   };
 
   const loadPost = async () => {
@@ -65,13 +74,13 @@ export default function PostDetailsPage() {
       setImages(imgs || []);
 
       if (data.userId) {
-        const { data: sellerData } = await supabase
+        const { data: sellerInfo } = await supabase
           .from("users")
-          .select("isVerified")
+          .select("*")
           .eq("id", data.userId)
           .maybeSingle();
 
-        setSellerVerified(!!sellerData?.isVerified);
+        setSellerData(sellerInfo || null);
 
         const { data: reviewsData } = await supabase
           .from("reviews")
@@ -159,8 +168,11 @@ export default function PostDetailsPage() {
       .maybeSingle();
 
     const buyerName =
-      `${currentProfile?.firstName || ""} ${currentProfile?.lastName || ""}`.trim() ||
-      "مستخدم";
+      `${currentProfile?.firstName || ""} ${
+        currentProfile?.lastName || ""
+      }`.trim() || "مستخدم";
+
+    const sellerName = getSellerFullName();
 
     const { error } = await supabase.from("chats").upsert({
       chatId,
@@ -169,7 +181,7 @@ export default function PostDetailsPage() {
       postTitle: post.title || "إعلان",
       sellerId,
       buyerId: userId,
-      sellerName: post.userName || "مستخدم",
+      sellerName,
       buyerName,
       lastMessage: "",
       updatedAt: Date.now(),
@@ -216,9 +228,9 @@ export default function PostDetailsPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 md:p-6">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <section className="rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
-          <p className="mb-2 text-sm font-bold text-green-400">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-xl">
+          <p className="mb-2 text-sm font-black text-green-400">
             تفاصيل الإعلان
           </p>
 
@@ -239,13 +251,13 @@ export default function PostDetailsPage() {
 
         <section className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <div className="overflow-hidden rounded-3xl bg-white p-4 shadow">
-              <div className="flex h-[420px] items-center justify-center overflow-hidden rounded-2xl bg-slate-200">
+            <div className="overflow-hidden rounded-[2rem] bg-white p-4 shadow">
+              <div className="flex h-[480px] items-center justify-center overflow-hidden rounded-3xl bg-slate-200">
                 {mainImage ? (
                   <img
                     src={mainImage}
                     alt={post.title || "صورة الإعلان"}
-                    className="h-full w-full object-contain"
+                    className="h-full w-full object-cover"
                   />
                 ) : (
                   <p className="text-slate-400">لا توجد صورة</p>
@@ -258,7 +270,7 @@ export default function PostDetailsPage() {
                     <button
                       key={index}
                       onClick={() => setActiveImage(index)}
-                      className={`h-20 w-24 shrink-0 overflow-hidden rounded-xl border ${
+                      className={`h-24 w-28 shrink-0 overflow-hidden rounded-2xl border ${
                         activeImage === index
                           ? "border-green-500 ring-2 ring-green-200"
                           : "border-slate-200"
@@ -277,30 +289,53 @@ export default function PostDetailsPage() {
           </div>
 
           <aside className="space-y-4">
-            <div className="rounded-3xl bg-white p-6 shadow">
+            <div className="rounded-[2rem] bg-white p-6 shadow">
               <p className="text-4xl font-black text-green-600">
                 {post.price ? `$${post.price}` : "حسب الاتفاق"}
               </p>
 
-              <p className="mt-3 text-sm text-slate-500">
+              <p className="mt-3 text-sm font-bold text-slate-500">
                 👁 {post.views || 0} مشاهدة
               </p>
 
-              <div className="mt-4 rounded-2xl bg-slate-50 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <button
-  onClick={() => router.push(`/profile/${post.userId}`)}
-  className="text-right transition hover:opacity-80"
->
-  <p className="text-lg font-black text-slate-900 hover:text-green-600">
-    👤 {post.userName || "مستخدم"}
-  </p>
+              <div className="mt-5 rounded-3xl bg-slate-50 p-4">
+                <button
+                  onClick={() => router.push(`/profile/${post.userId}`)}
+                  className="flex w-full items-center gap-3 text-right"
+                >
+                  {sellerData?.avatar ? (
+                    <img
+                      src={sellerData.avatar}
+                      className="h-16 w-16 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xl font-black text-white">
+                      {getSellerFullName().charAt(0)}
+                    </div>
+                  )}
 
-  <p className="mt-1 text-xs font-bold text-slate-400">
-    عرض الملف الشخصي
-  </p>
-</button>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="truncate text-lg font-black text-slate-900 hover:text-green-600">
+                        {getSellerFullName()}
+                      </p>
+
+                      {sellerData?.isVerified && (
+                        <span className="rounded-full bg-blue-500 px-2 py-1 text-xs font-black text-white">
+                          ✔ موثق
+                        </span>
+                      )}
+
+                      {sellerData?.isOnline && (
+                        <span className="rounded-full bg-green-500 px-2 py-1 text-xs font-black text-white">
+                          🟢 متصل
+                        </span>
+                      )}
+                    </div>
+
+                    <p className="mt-1 text-xs font-bold text-slate-400">
+                      عرض الملف الشخصي
+                    </p>
 
                     <div className="mt-2 flex items-center gap-2">
                       <span className="font-black text-yellow-500">
@@ -312,51 +347,46 @@ export default function PostDetailsPage() {
                       </span>
                     </div>
                   </div>
-
-                  {sellerVerified && (
-                    <div className="rounded-full bg-blue-500 px-3 py-2 text-sm font-bold text-white">
-                      ✔ موثق
-                    </div>
-                  )}
-                </div>
+                </button>
               </div>
 
               <div className="mt-6 grid gap-3">
                 <button
                   onClick={openWhatsApp}
-                  className="w-full rounded-xl bg-green-500 py-3 font-bold text-white hover:bg-green-600"
+                  className="w-full rounded-2xl bg-green-500 py-4 font-bold text-white hover:bg-green-600"
                 >
                   تواصل واتساب
                 </button>
 
                 <button
                   onClick={startChat}
-                  className="w-full rounded-xl bg-blue-500 py-3 font-bold text-white hover:bg-blue-600"
+                  className="w-full rounded-2xl bg-blue-500 py-4 font-bold text-white hover:bg-blue-600"
                 >
                   مراسلة داخل الموقع
                 </button>
+
                 <button
-  onClick={() => router.push(`/report/${post.id}`)}
-  className="w-full rounded-xl bg-red-500 py-3 font-bold text-white hover:bg-red-600"
->
-  🚨 إبلاغ عن الإعلان
-</button>
+                  onClick={() => router.push(`/report/${post.id}`)}
+                  className="w-full rounded-2xl bg-red-500 py-4 font-bold text-white hover:bg-red-600"
+                >
+                  🚨 إبلاغ عن الإعلان
+                </button>
               </div>
             </div>
 
             {userId === post.userId && (
-              <div className="rounded-3xl bg-white p-6 shadow">
+              <div className="rounded-[2rem] bg-white p-6 shadow">
                 <div className="grid gap-3">
                   <button
                     onClick={() => router.push(`/boost/${post.id}`)}
-                    className="w-full rounded-xl bg-orange-500 py-3 font-bold text-white hover:bg-orange-600"
+                    className="w-full rounded-2xl bg-orange-500 py-4 font-bold text-white hover:bg-orange-600"
                   >
                     🔥 طلب ترويج
                   </button>
 
                   <button
                     onClick={() => router.push(`/edit/${post.id}`)}
-                    className="w-full rounded-xl bg-slate-900 py-3 font-bold text-white hover:bg-slate-800"
+                    className="w-full rounded-2xl bg-slate-900 py-4 font-bold text-white hover:bg-slate-800"
                   >
                     تعديل الإعلان
                   </button>
@@ -366,7 +396,7 @@ export default function PostDetailsPage() {
           </aside>
         </section>
 
-        <section className="rounded-3xl bg-white p-6 shadow">
+        <section className="rounded-[2rem] bg-white p-6 shadow">
           <h2 className="mb-4 text-2xl font-black">الوصف</h2>
 
           <p className="whitespace-pre-line leading-8 text-slate-700">
@@ -374,7 +404,7 @@ export default function PostDetailsPage() {
           </p>
         </section>
 
-        <section className="rounded-3xl bg-white p-6 shadow">
+        <section className="rounded-[2rem] bg-white p-6 shadow">
           <h2 className="mb-4 text-2xl font-black">معلومات الإعلان</h2>
 
           <div className="grid gap-3 text-slate-700 md:grid-cols-2">
@@ -398,7 +428,7 @@ export default function PostDetailsPage() {
 
         <button
           onClick={() => router.push("/marketplace")}
-          className="rounded-xl bg-slate-900 px-5 py-3 font-bold text-white hover:bg-slate-800"
+          className="rounded-2xl bg-slate-900 px-6 py-4 font-bold text-white hover:bg-slate-800"
         >
           الرجوع للسوق
         </button>
