@@ -8,6 +8,7 @@ import Sidebar from "./Sidebar";
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hasUser, setHasUser] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
 
   const setUserOnline = async (userId: string) => {
     await supabase
@@ -34,20 +35,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let currentUserId = "";
 
-    const checkUser = async () => {
-      const { data } = await supabase.auth.getUser();
+    const initAuth = async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
 
-      const user = data.user;
-
-      setHasUser(!!user);
+      const user = session?.user;
 
       if (user) {
         currentUserId = user.id;
+        setHasUser(true);
         await setUserOnline(user.id);
+      } else {
+        currentUserId = "";
+        setHasUser(false);
       }
+
+      setAuthReady(true);
     };
 
-    checkUser();
+    initAuth();
 
     const heartbeat = setInterval(async () => {
       if (currentUserId) {
@@ -55,48 +62,42 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       }
     }, 30000);
 
-    const handleBeforeUnload = () => {
-      if (currentUserId) {
-        navigator.sendBeacon(
-          "/api/user-offline",
-          JSON.stringify({
-            userId: currentUserId,
-          })
-        );
-      }
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const nextUser = session?.user;
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      const user = session?.user;
 
-      if (!nextUser && currentUserId) {
-        await setUserOffline(currentUserId);
+      if (event === "SIGNED_OUT" || !user) {
+        if (currentUserId) {
+          await setUserOffline(currentUserId);
+        }
+
         currentUserId = "";
         setHasUser(false);
+        setAuthReady(true);
         return;
       }
 
-      if (nextUser) {
-        currentUserId = nextUser.id;
-        setHasUser(true);
-        await setUserOnline(nextUser.id);
-      }
+      currentUserId = user.id;
+      setHasUser(true);
+      setAuthReady(true);
+      await setUserOnline(user.id);
     });
 
     return () => {
       clearInterval(heartbeat);
-      window.removeEventListener("beforeunload", handleBeforeUnload);
       subscription.unsubscribe();
-
-      if (currentUserId) {
-        setUserOffline(currentUserId);
-      }
     };
   }, []);
+
+  if (!authReady) {
+    return (
+      <>
+        <Header />
+        <main className="pt-4">{children}</main>
+      </>
+    );
+  }
 
   return (
     <>
