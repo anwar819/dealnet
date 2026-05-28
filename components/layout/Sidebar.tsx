@@ -18,44 +18,83 @@ export default function Sidebar({
   const [user, setUser] = useState<any>(null);
   const [firstName, setFirstName] = useState("");
   const [isAdmin, setIsAdmin] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    loadUser();
+    initialize();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!session?.user) {
+        setUser(null);
+        setFirstName("");
+        setIsAdmin(false);
+        setReady(true);
+        return;
+      }
+
+      await loadUser(session.user);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const loadUser = async () => {
+  const initialize = async () => {
     const {
-      data: { user },
-    } = await supabase.auth.getUser();
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    if (!user) {
-      setUser(null);
+    if (!session?.user) {
+      setReady(true);
       return;
     }
 
-    setUser(user);
+    await loadUser(session.user);
+  };
 
-    // ✅ البحث بالبريد بدل id
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("email", user.email)
-      .single();
+  const loadUser = async (authUser: any) => {
+    try {
+      setUser(authUser);
 
-    console.log("USER DATA:", data);
-    console.log("USER ERROR:", error);
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("id", authUser.id)
+        .single();
 
-    if (data) {
-      setFirstName(data.firstName || "مستخدم");
-      setIsAdmin(data.isAdmin === true);
+      if (error) {
+        console.error(error);
+      }
+
+      if (data) {
+        setFirstName(data.firstName || "مستخدم");
+        setIsAdmin(data.isAdmin === true);
+      }
+
+      setReady(true);
+    } catch (error) {
+      console.error(error);
+      setReady(true);
     }
   };
 
   const logout = async () => {
-  await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
 
-  window.location.href = "/login";
-};
+      setUser(null);
+      setFirstName("");
+      setIsAdmin(false);
+
+      window.location.href = "/login";
+    } catch (error) {
+      console.error(error);
+      alert("فشل تسجيل الخروج");
+    }
+  };
 
   const pageTitle = useMemo(() => {
     if (pathname.startsWith("/admin")) return "لوحة الإدارة";
@@ -76,6 +115,8 @@ export default function Sidebar({
         ? "bg-green-500 text-white"
         : "hover:bg-slate-900 hover:text-green-400"
     }`;
+
+  if (!ready) return null;
 
   if (!user) return null;
 
@@ -136,6 +177,10 @@ export default function Sidebar({
 
                   <Link href="/messages" className={linkClass("/messages")}>
                     📩 الرسائل
+                  </Link>
+
+                  <Link href="/notifications" className={linkClass("/notifications")}>
+                    🔔 الإشعارات
                   </Link>
 
                   <Link href="/account" className={linkClass("/account")}>
