@@ -81,16 +81,16 @@ export default function Sidebar({
     }
   };
 
-  const logout = async () => {
+ const logout = async () => {
   try {
-    await supabase.auth.signOut();
-
+    setOpen(false);
     setUser(null);
     setFirstName("");
     setIsAdmin(false);
-    setOpen(false);
 
-    window.location.replace("/");
+    await supabase.auth.signOut({ scope: "local" });
+
+    window.location.href = `/?logout=${Date.now()}`;
   } catch (error) {
     console.error(error);
     alert("فشل تسجيل الخروج");

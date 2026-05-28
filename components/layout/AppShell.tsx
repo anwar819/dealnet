@@ -106,12 +106,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {hasUser && <Sidebar open={sidebarOpen} setOpen={setSidebarOpen} />}
 
       <main
-        className={`pt-4 transition-all duration-300 ${
-          hasUser && sidebarOpen ? "md:pr-72" : "md:pr-0"
-        }`}
-      >
-        {children}
-      </main>
+  key={hasUser ? "with-sidebar" : "without-sidebar"}
+  className={`pt-4 transition-all duration-300 ${
+    hasUser && sidebarOpen ? "md:pr-72" : "md:pr-0"
+  }`}
+>
+  {children}
+</main>
     </>
   );
 }
