@@ -11,6 +11,7 @@ type PostType = {
   price?: string;
   location?: string;
   city?: string;
+  userId?: string;
   userName?: string;
   type?: string;
   category?: string;
@@ -27,6 +28,9 @@ type PostType = {
   boostedAt?: number | null;
   boostExpiresAt?: number | null;
   isHidden?: boolean;
+  seller?: any;
+  sellerRating?: number;
+  sellerReviews?: number;
 };
 
 type FavoriteType = {
@@ -103,10 +107,40 @@ export default function MarketplacePage() {
         });
       }
 
-      const postsWithCounts = (postsData || []).map((post: any) => ({
-        ...post,
-        favoriteCount: favoriteCounts[post.id] || 0,
-      }));
+      const userIds = [
+        ...new Set((postsData || []).map((p: any) => p.userId).filter(Boolean)),
+      ];
+
+      const { data: usersData } =
+        userIds.length > 0
+          ? await supabase.from("users").select("*").in("id", userIds)
+          : { data: [] as any[] };
+
+      const { data: reviewsData } = await supabase.from("reviews").select("*");
+
+      const postsWithCounts = (postsData || []).map((post: any) => {
+        const seller = usersData?.find((u: any) => u.id === post.userId);
+
+        const sellerReviews = (reviewsData || []).filter(
+          (r: any) => r.targetUserId === post.userId
+        );
+
+        const avgRating =
+          sellerReviews.length > 0
+            ? sellerReviews.reduce(
+                (sum: number, r: any) => sum + Number(r.rating || 0),
+                0
+              ) / sellerReviews.length
+            : 0;
+
+        return {
+          ...post,
+          seller,
+          sellerRating: avgRating,
+          sellerReviews: sellerReviews.length,
+          favoriteCount: favoriteCounts[post.id] || 0,
+        };
+      });
 
       setPosts(postsWithCounts);
     } catch (error) {
@@ -191,10 +225,7 @@ export default function MarketplacePage() {
     const existing = favorites.find((fav) => fav.postId === postId);
 
     if (existing) {
-      const { error } = await supabase
-        .from("favorites")
-        .delete()
-        .eq("id", existing.id);
+      const { error } = await supabase.from("favorites").delete().eq("id", existing.id);
 
       if (error) {
         console.error(error);
@@ -314,6 +345,13 @@ export default function MarketplacePage() {
       if (a.isFeatured && !b.isFeatured) return -1;
       if (!a.isFeatured && b.isFeatured) return 1;
 
+      if (a.seller?.isVerified && !b.seller?.isVerified) return -1;
+      if (!a.seller?.isVerified && b.seller?.isVerified) return 1;
+
+      if ((b.sellerRating || 0) !== (a.sellerRating || 0)) {
+        return (b.sellerRating || 0) - (a.sellerRating || 0);
+      }
+
       if (sortBy === "low") return getPriceNumber(a.price) - getPriceNumber(b.price);
       if (sortBy === "high") return getPriceNumber(b.price) - getPriceNumber(a.price);
       if (sortBy === "views") return (b.views || 0) - (a.views || 0);
@@ -345,7 +383,7 @@ export default function MarketplacePage() {
               </p>
               <h1 className="text-4xl font-black">السوق</h1>
               <p className="mt-3 text-slate-300">
-                الإعلانات المروّجة تظهر أولًا لزيادة فرص البيع.
+                الإعلانات المروّجة والموثقة تظهر أولًا لزيادة الثقة وفرص البيع.
               </p>
             </div>
 
@@ -578,6 +616,51 @@ export default function MarketplacePage() {
                   </div>
 
                   <div className="p-5">
+                    <div className="mb-3 flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => {
+                          if (post.userId) {
+                            window.location.href = `/profile/${post.userId}`;
+                          }
+                        }}
+                        className="flex min-w-0 items-center gap-2 text-right"
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-black text-white">
+                          {post?.seller?.firstName
+                            ? post.seller.firstName.charAt(0)
+                            : "U"}
+                        </div>
+
+                        <div className="min-w-0 text-right">
+                          <div className="flex items-center gap-1">
+                            <p className="truncate text-sm font-black text-slate-900">
+                              {post?.seller?.firstName || post.userName || "مستخدم"}
+                            </p>
+
+                            {post?.seller?.isVerified && (
+                              <span className="rounded-full bg-blue-500 px-2 py-[2px] text-[10px] font-black text-white">
+                                ✔
+                              </span>
+                            )}
+
+                            {post?.seller?.isOnline && (
+                              <span className="text-green-500">🟢</span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 text-xs text-slate-500">
+                            <span>
+                              ⭐ {Number(post?.sellerRating || 0).toFixed(1)}
+                            </span>
+
+                            <span>
+                              ({post?.sellerReviews || 0})
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    </div>
+
                     <div className="mb-3 flex flex-wrap gap-2">
                       <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-700">
                         {postMain}
