@@ -52,10 +52,10 @@ export default function Sidebar({
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-    router.refresh();
-  };
+  await supabase.auth.signOut();
+
+  window.location.href = "/login";
+};
 
   const pageTitle = useMemo(() => {
     if (pathname.startsWith("/admin")) return "لوحة الإدارة";
