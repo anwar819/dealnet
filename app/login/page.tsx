@@ -13,12 +13,11 @@ function LoginContent() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
 
   const login = async () => {
-    if (!email || !password) {
-      alert("يرجى إدخال البريد وكلمة المرور");
+    if (!email.trim() || !password.trim()) {
+      alert("يرجى إدخال البريد الإلكتروني وكلمة المرور");
       return;
     }
 
@@ -26,13 +25,13 @@ function LoginContent() {
       setLoading(true);
 
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim(),
         password,
       });
 
       if (error || !data.user) {
         console.error(error);
-        alert("بيانات الدخول غير صحيحة أو البريد غير موثق");
+        alert("البريد الإلكتروني أو كلمة المرور غير صحيحة");
         return;
       }
 
@@ -40,7 +39,7 @@ function LoginContent() {
         .from("users")
         .select("isBlocked")
         .eq("id", data.user.id)
-        .single();
+        .maybeSingle();
 
       if (profile?.isBlocked) {
         await supabase.auth.signOut();
@@ -48,10 +47,12 @@ function LoginContent() {
         return;
       }
 
-      const target = action === "chat" ? `${redirect}?action=chat` : redirect;
+      const target =
+        action === "chat"
+          ? `${redirect}?action=chat`
+          : redirect;
 
-router.push(target);
-router.refresh();
+      window.location.href = target;
     } catch (error) {
       console.error(error);
       alert("حدث خطأ أثناء تسجيل الدخول");
@@ -62,63 +63,80 @@ router.refresh();
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-xl">
-        <h1 className="mb-6 text-center text-3xl font-black">تسجيل الدخول</h1>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          login();
+        }}
+        className="w-full max-w-md rounded-3xl bg-white p-8 shadow-xl"
+      >
+        <h1 className="mb-8 text-center text-3xl font-black">
+          تسجيل الدخول
+        </h1>
 
         <input
+          type="email"
+          autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="البريد الإلكتروني"
-          className="mb-3 w-full rounded-xl border p-3 outline-none focus:border-green-500"
+          className="mb-4 w-full rounded-xl border border-slate-300 p-4 outline-none transition focus:border-green-500"
         />
 
         <input
-  value={password}
-  onChange={(e) => setPassword(e.target.value)}
-  onKeyDown={(e) => {
-    if (e.key === "Enter") {
-      login();
-    }
-  }}
-  type="password"
-  placeholder="كلمة المرور"
-  className="mb-5 w-full rounded-xl border p-3 outline-none focus:border-green-500"
-/>
+          type="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="كلمة المرور"
+          className="mb-6 w-full rounded-xl border border-slate-300 p-4 outline-none transition focus:border-green-500"
+        />
 
         <button
-          onClick={login}
+          type="submit"
           disabled={loading}
-          className="w-full rounded-xl bg-green-500 py-3 font-bold text-white hover:bg-green-600 disabled:opacity-60"
+          className="w-full rounded-xl bg-green-500 py-4 font-bold text-white transition hover:bg-green-600 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "جاري الدخول..." : "دخول"}
+          {loading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
         </button>
-         <div className="mt-4 flex items-center justify-between text-sm font-bold">
-  <button
-    onClick={() => (window.location.href = "/forgot-password")}
-    className="text-green-600 hover:underline"
-  >
-    نسيت كلمة المرور؟
-  </button>
 
-  <button
-    onClick={() =>
-      router.push(
-        `/register?redirect=${redirect}${action ? `&action=${action}` : ""}`
-      )
-    }
-    className="text-slate-700 hover:text-green-600 hover:underline"
-  >
-    إنشاء حساب جديد
-  </button>
-</div>
-      </div>
+        <div className="mt-5 flex items-center justify-between text-sm font-bold">
+          <button
+            type="button"
+            onClick={() => router.push("/forgot-password")}
+            className="text-green-600 hover:underline"
+          >
+            نسيت كلمة المرور؟
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              router.push(
+                `/register?redirect=${redirect}${
+                  action ? `&action=${action}` : ""
+                }`
+              )
+            }
+            className="text-slate-700 hover:text-green-600 hover:underline"
+          >
+            إنشاء حساب جديد
+          </button>
+        </div>
+      </form>
     </main>
   );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="p-10 text-center">جاري التحميل...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          جاري التحميل...
+        </div>
+      }
+    >
       <LoginContent />
     </Suspense>
   );
