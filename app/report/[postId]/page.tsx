@@ -121,7 +121,13 @@ export default function ReportPostPage() {
       }
 
       await notifyAdmins(post.id, post.title || "بدون عنوان");
-
+await createNotification({
+  userId: post.userId,
+  title: "🚨 تم الإبلاغ عن إعلانك",
+  message: `تم إرسال بلاغ على إعلانك: ${post.title || "بدون عنوان"}`,
+  link: `/post/${post.id}`,
+  type: "report",
+});
       alert("تم إرسال البلاغ وسيتم مراجعته من الإدارة");
       router.push(`/post/${post.id}`);
     } catch (error) {
