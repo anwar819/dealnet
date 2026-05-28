@@ -212,16 +212,16 @@ export default function ChatPage() {
         .eq("chatId", chatId);
 
       if (targetUser) {
-        await createNotification({
-          userId: targetUser,
-          title: "💬 رسالة جديدة",
-          message: `لديك رسالة جديدة بخصوص: ${
-            chat?.postTitle || "إعلان"
-          }`,
-          link: `/chat/${chatId}`,
-          type: "chat",
-        });
-      }
+  await createNotification({
+    userId: targetUser,
+    title: "💬 رسالة جديدة",
+    message: `رسالة جديدة من ${myName || "مستخدم"} بخصوص: ${
+      chat?.postTitle || "إعلان"
+    }`,
+    link: `/chat/${chatId}`,
+    type: "chat",
+  });
+}
 
       setText("");
 
