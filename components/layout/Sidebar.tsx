@@ -82,19 +82,20 @@ export default function Sidebar({
   };
 
   const logout = async () => {
-    try {
-      await supabase.auth.signOut();
+  try {
+    await supabase.auth.signOut();
 
-      setUser(null);
-      setFirstName("");
-      setIsAdmin(false);
+    setUser(null);
+    setFirstName("");
+    setIsAdmin(false);
+    setOpen(false);
 
-      window.location.href = "/login";
-    } catch (error) {
-      console.error(error);
-      alert("فشل تسجيل الخروج");
-    }
-  };
+    window.location.replace("/");
+  } catch (error) {
+    console.error(error);
+    alert("فشل تسجيل الخروج");
+  }
+};
 
   const pageTitle = useMemo(() => {
     if (pathname.startsWith("/admin")) return "لوحة الإدارة";
