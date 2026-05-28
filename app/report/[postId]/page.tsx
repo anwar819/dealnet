@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
+import { createNotification } from "../../../lib/notifications";
 
 const reasons = [
   "احتيال أو إعلان وهمي",
@@ -64,6 +65,28 @@ export default function ReportPostPage() {
     }
   };
 
+  const notifyAdmins = async (reportPostId: string, reportTitle: string) => {
+    const { data: admins, error } = await supabase
+      .from("users")
+      .select("id")
+      .eq("isAdmin", true);
+
+    if (error) {
+      console.error("Failed to load admins:", error);
+      return;
+    }
+
+    for (const admin of admins || []) {
+      await createNotification({
+        userId: admin.id,
+        title: "🚨 بلاغ جديد",
+        message: `وصل بلاغ جديد عن الإعلان: ${reportTitle}`,
+        link: `/admin/reports`,
+        type: "report",
+      });
+    }
+  };
+
   const submitReport = async () => {
     if (!userId || !post) return;
 
@@ -96,6 +119,8 @@ export default function ReportPostPage() {
         alert("فشل إرسال البلاغ");
         return;
       }
+
+      await notifyAdmins(post.id, post.title || "بدون عنوان");
 
       alert("تم إرسال البلاغ وسيتم مراجعته من الإدارة");
       router.push(`/post/${post.id}`);
