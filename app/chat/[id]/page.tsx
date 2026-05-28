@@ -139,14 +139,15 @@ export default function ChatPage() {
       }
 
       setMessages(data || []);
-
+       
       await supabase
-        .from("messages")
-        .update({
-          isRead: true,
-        })
-        .eq("chatId", chatId)
-        .eq("receiverId", userId);
+  .from("messages")
+  .update({
+    isRead: true,
+  })
+  .eq("chatId", chatId)
+  .eq("receiverId", userId)
+  .eq("isRead", false);
     } catch (error) {
       console.error(error);
     }
