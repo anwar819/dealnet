@@ -75,6 +75,11 @@ router.refresh();
         <input
           value={password}
           onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => {
+  if (e.key === "Enter") {
+    login();
+  }
+}}
           type="password"
           placeholder="كلمة المرور"
           className="mb-5 w-full rounded-xl border p-3 outline-none focus:border-green-500"
