@@ -8,45 +8,44 @@ export default function Header() {
   const [user, setUser] = useState<any>(null);
   const [firstName, setFirstName] = useState("");
   const [unreadCount, setUnreadCount] = useState(0);
+  const [ready, setReady] = useState(false);
+
+  const clearUser = () => {
+    setUser(null);
+    setFirstName("");
+    setUnreadCount(0);
+    setReady(true);
+  };
 
   const loadUser = async () => {
-    const { data } = await supabase.auth.getUser();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    if (!data.user) {
-      setUser(null);
-      setFirstName("");
-      setUnreadCount(0);
+    if (!session?.user) {
+      clearUser();
       return;
     }
 
-    setUser(data.user);
+    setUser(session.user);
 
     const { data: profile } = await supabase
       .from("users")
       .select("firstName")
-      .eq("id", data.user.id)
-      .single();
+      .eq("id", session.user.id)
+      .maybeSingle();
 
     setFirstName(profile?.firstName || "مستخدم");
-
-    await loadUnreadNotifications(data.user.id);
+    await loadUnreadNotifications(session.user.id);
+    setReady(true);
   };
 
   const loadUnreadNotifications = async (userId: string) => {
-    const { count, error } = await supabase
+    const { count } = await supabase
       .from("notifications")
-      .select("*", {
-        count: "exact",
-        head: true,
-      })
+      .select("*", { count: "exact", head: true })
       .eq("userId", userId)
       .eq("isRead", false);
-
-    if (error) {
-      console.error(error);
-      setUnreadCount(0);
-      return;
-    }
 
     setUnreadCount(count || 0);
   };
@@ -56,8 +55,13 @@ export default function Header() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(() => {
-      loadUser();
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_OUT" || !session?.user) {
+        clearUser();
+        return;
+      }
+
+      await loadUser();
     });
 
     return () => {
@@ -97,15 +101,13 @@ export default function Header() {
           <span className="text-white">Net</span>
         </Link>
 
-        {user ? (
+        {!ready ? null : user ? (
           <div className="flex items-center gap-3">
             <Link
               href="/notifications"
               className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-slate-900 text-xl transition hover:bg-slate-800"
-              title="الإشعارات"
             >
               🔔
-
               {unreadCount > 0 && (
                 <span className="absolute -left-2 -top-2 flex h-6 min-w-[24px] items-center justify-center rounded-full bg-red-500 px-2 text-xs font-black text-white shadow">
                   {unreadCount > 99 ? "99+" : unreadCount}
