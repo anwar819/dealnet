@@ -191,7 +191,7 @@ const logout = async () => {
                 </>
               ) : (
                 <>
-                  <Link href="/admin/posts" className={linkClass("/admin/posts")}>
+                  <Link href="/admin" className={linkClass("/admin")}>
                     📦 إدارة الإعلانات
                   </Link>
 
