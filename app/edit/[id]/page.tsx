@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useState } from "react";
+import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "../../../lib/supabase";
 
@@ -23,7 +23,6 @@ export default function EditPostPage() {
   const [type, setType] = useState("sell");
   const [mainCategory, setMainCategory] = useState("");
   const [subCategory, setSubCategory] = useState("");
-
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [price, setPrice] = useState("");
@@ -39,6 +38,17 @@ export default function EditPostPage() {
   useEffect(() => {
     checkUserAndLoadPost();
   }, [id]);
+
+  const progress = useMemo(() => {
+    let value = 0;
+    if (mainCategory) value += 15;
+    if (subCategory) value += 15;
+    if (title.trim().length >= 5) value += 20;
+    if (desc.trim().length >= 20) value += 20;
+    if (location.trim()) value += 15;
+    if (oldImages.length + newImages.length > 0) value += 15;
+    return Math.min(value, 100);
+  }, [mainCategory, subCategory, title, desc, location, oldImages, newImages]);
 
   const checkUserAndLoadPost = async () => {
     try {
@@ -92,14 +102,13 @@ export default function EditPostPage() {
       }
 
       setPost(data);
-
       setType(data.type || "sell");
       setMainCategory(data.mainCategory || data.category || "");
       setSubCategory(data.subCategory || "");
       setTitle(data.title || "");
       setDesc(data.description || data.desc || "");
       setPrice(data.price || "");
-      setLocation(data.location || "");
+      setLocation(data.location || data.city || "");
       setIsHidden(data.isHidden === true);
 
       const imgs =
@@ -119,7 +128,7 @@ export default function EditPostPage() {
   const handleNewImages = (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    setNewImages(Array.from(files));
+    setNewImages(Array.from(files).slice(0, 8));
   };
 
   const removeOldImage = (index: number) => {
@@ -130,25 +139,33 @@ export default function EditPostPage() {
     setNewImages((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const getMainPreviewImage = () => {
+    if (oldImages.length > 0) return oldImages[0];
+    if (newImages.length > 0) return URL.createObjectURL(newImages[0]);
+    return "";
+  };
+
   const uploadImages = async () => {
     const urls: string[] = [];
 
     for (const image of newImages) {
-      const formData = new FormData();
-      formData.append("image", image);
+      const fileExt = image.name.split(".").pop();
+      const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
+      const filePath = `posts/${fileName}`;
 
-      const res = await fetch("http://samedical.online/upload.php", {
-        method: "POST",
-        body: formData,
-      });
+      const { error } = await supabase.storage
+        .from("post-images")
+        .upload(filePath, image);
 
-      const data = await res.json();
-
-      if (data.error) {
-        throw new Error(data.error);
+      if (error) {
+        throw new Error(error.message);
       }
 
-      urls.push(data.url);
+      const { data } = supabase.storage
+        .from("post-images")
+        .getPublicUrl(filePath);
+
+      urls.push(data.publicUrl);
     }
 
     return urls;
@@ -187,7 +204,7 @@ export default function EditPostPage() {
           title: title.trim(),
           desc: desc.trim(),
           description: desc.trim(),
-          price,
+          price: price.trim(),
           location: location.trim(),
           city: location.trim(),
           imageUrls: finalImages,
@@ -214,6 +231,27 @@ export default function EditPostPage() {
     }
   };
 
+  const deletePost = async () => {
+    if (!post) return;
+    if (!confirm("هل أنت متأكد من حذف الإعلان نهائيًا؟")) return;
+
+    const { error } = await supabase.from("posts").delete().eq("id", post.id);
+
+    if (error) {
+      console.error(error);
+      alert("فشل حذف الإعلان");
+      return;
+    }
+
+    alert("تم حذف الإعلان");
+    router.push("/my-posts");
+  };
+
+  const formatDate = (value?: number) => {
+    if (!value) return "غير معروف";
+    return new Date(value).toLocaleDateString("ar-IQ");
+  };
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100">
@@ -224,240 +262,301 @@ export default function EditPostPage() {
 
   return (
     <main className="min-h-screen bg-slate-100 p-4 md:p-6">
-      <div className="mx-auto max-w-5xl space-y-6">
-        <section className="rounded-3xl bg-slate-950 p-6 text-white shadow-xl">
-          <h1 className="text-3xl font-black">✏️ تعديل الإعلان</h1>
-          <p className="mt-2 text-slate-300">
-            عدّل بيانات الإعلان واحفظ التغييرات.
-          </p>
-        </section>
-
-        <section className="rounded-3xl bg-white p-6 shadow">
-          <h2 className="mb-6 text-2xl font-black">بيانات الإعلان</h2>
-
-          <div className="grid gap-5 md:grid-cols-2">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-xl">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">
-                نوع الإعلان
-              </label>
-
-              <select
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 bg-white p-3 outline-none focus:border-green-500"
-              >
-                <option value="sell">بيع</option>
-                <option value="buy">طلب شراء</option>
-                <option value="service">خدمة</option>
-                <option value="request">طلب خدمة</option>
-                <option value="partnership">شراكة</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">
-                القسم الرئيسي
-              </label>
-
-              <select
-                value={mainCategory}
-                onChange={(e) => {
-                  setMainCategory(e.target.value);
-                  setSubCategory("");
-                }}
-                className="w-full rounded-xl border border-slate-300 bg-white p-3 outline-none focus:border-green-500"
-              >
-                <option value="">اختر القسم الرئيسي</option>
-                {Object.keys(categories).map((cat) => (
-                  <option key={cat} value={cat}>
-                    {cat}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">
-                القسم الفرعي
-              </label>
-
-              <select
-                value={subCategory}
-                onChange={(e) => setSubCategory(e.target.value)}
-                disabled={!mainCategory}
-                className="w-full rounded-xl border border-slate-300 bg-white p-3 outline-none focus:border-green-500 disabled:bg-slate-100"
-              >
-                <option value="">اختر القسم الفرعي</option>
-                {mainCategory &&
-                  categories[mainCategory]?.map((sub) => (
-                    <option key={sub} value={sub}>
-                      {sub}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-700">
-                السعر
-              </label>
-
-              <input
-                value={price}
-                onChange={(e) => setPrice(e.target.value)}
-                placeholder="مثال: 500"
-                className="w-full rounded-xl border border-slate-300 p-3 outline-none focus:border-green-500"
-              />
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <label className="mb-2 block text-sm font-bold text-slate-700">
-              عنوان الإعلان
-            </label>
-
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="عنوان الإعلان"
-              className="w-full rounded-xl border border-slate-300 p-3 outline-none focus:border-green-500"
-            />
-          </div>
-
-          <div className="mt-5">
-            <label className="mb-2 block text-sm font-bold text-slate-700">
-              الوصف
-            </label>
-
-            <textarea
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              rows={6}
-              placeholder="وصف الإعلان"
-              className="w-full rounded-xl border border-slate-300 p-3 outline-none focus:border-green-500"
-            />
-          </div>
-
-          <div className="mt-5">
-            <label className="mb-2 block text-sm font-bold text-slate-700">
-              الموقع
-            </label>
-
-            <input
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="مثال: بغداد"
-              className="w-full rounded-xl border border-slate-300 p-3 outline-none focus:border-green-500"
-            />
-          </div>
-
-          <div className="mt-5 rounded-2xl bg-slate-50 p-4">
-            <label className="flex items-center gap-3 font-bold text-slate-700">
-              <input
-                type="checkbox"
-                checked={isHidden}
-                onChange={(e) => setIsHidden(e.target.checked)}
-                className="h-5 w-5"
-              />
-              إخفاء الإعلان مؤقتًا من السوق
-            </label>
-          </div>
-        </section>
-
-        <section className="rounded-3xl bg-white p-6 shadow">
-          <h2 className="mb-4 text-2xl font-black">صور الإعلان</h2>
-
-          {oldImages.length > 0 && (
-            <>
-              <p className="mb-3 text-sm font-bold text-slate-600">
-                الصور الحالية
+              <p className="mb-2 text-sm font-black text-green-400">
+                DealNet Editor
               </p>
 
-              <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-                {oldImages.map((img, index) => (
-                  <div
-                    key={index}
-                    className="relative overflow-hidden rounded-xl border bg-slate-100"
-                  >
-                    <img
-                      src={img}
-                      alt="صورة الإعلان"
-                      className="h-32 w-full object-cover"
-                    />
+              <h1 className="text-4xl font-black">✏️ تعديل الإعلان</h1>
 
-                    <button
-                      type="button"
-                      onClick={() => removeOldImage(index)}
-                      className="absolute left-2 top-2 rounded bg-red-500 px-2 py-1 text-xs font-bold text-white"
-                    >
-                      حذف
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+              <p className="mt-3 text-slate-300">
+                عدّل بيانات الإعلان، الصور، الحالة، ثم احفظ التغييرات.
+              </p>
 
-          <label className="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 p-8 text-center transition hover:border-green-500 hover:bg-green-50">
-            <span className="text-4xl">📸</span>
-            <span className="mt-3 font-bold text-slate-800">
-              إضافة صور جديدة
-            </span>
-            <span className="mt-1 text-sm text-slate-500">
-              يمكنك اختيار أكثر من صورة
-            </span>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <span className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-slate-200">
+                  👁 {post?.views || 0} مشاهدة
+                </span>
 
-            <input
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={handleNewImages}
-              className="hidden"
-            />
-          </label>
+                <span className="rounded-full bg-white/10 px-4 py-2 text-sm font-bold text-slate-200">
+                  📅 نشر: {formatDate(post?.createdAt)}
+                </span>
 
-          {newImages.length > 0 && (
-            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-              {newImages.map((image, index) => (
-                <div
-                  key={index}
-                  className="relative overflow-hidden rounded-xl border bg-slate-100"
+                <span
+                  className={`rounded-full px-4 py-2 text-sm font-bold text-white ${
+                    isHidden ? "bg-red-500" : "bg-green-500"
+                  }`}
                 >
-                  <img
-                    src={URL.createObjectURL(image)}
-                    alt="صورة جديدة"
-                    className="h-32 w-full object-cover"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={() => removeNewImage(index)}
-                    className="absolute left-2 top-2 rounded bg-red-500 px-2 py-1 text-xs font-bold text-white"
-                  >
-                    حذف
-                  </button>
-                </div>
-              ))}
+                  {isHidden ? "مخفي" : "نشط"}
+                </span>
+              </div>
             </div>
-          )}
+
+            <div className="rounded-3xl bg-white/10 p-5">
+              <p className="text-sm font-bold text-slate-300">اكتمال الإعلان</p>
+              <div className="mt-2 flex items-center gap-3">
+                <div className="h-3 w-44 overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full bg-green-500 transition-all"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <span className="font-black">{progress}%</span>
+              </div>
+            </div>
+          </div>
         </section>
 
-        <section className="flex flex-col gap-3 md:flex-row">
-          <button
-            onClick={saveChanges}
-            disabled={saving}
-            className="flex-1 rounded-2xl bg-green-500 py-4 text-lg font-black text-white hover:bg-green-600 disabled:opacity-60"
-          >
-            {saving ? "جاري الحفظ..." : "حفظ التعديلات"}
-          </button>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <section className="rounded-[2rem] bg-white p-6 shadow-xl">
+              <h2 className="mb-6 text-2xl font-black">بيانات الإعلان</h2>
 
-          <button
-            onClick={() => router.push(`/post/${id}`)}
-            className="rounded-2xl bg-slate-900 px-6 py-4 font-bold text-white hover:bg-slate-800"
-          >
-            إلغاء
-          </button>
-        </section>
+              <div className="grid gap-5 md:grid-cols-2">
+                <select
+                  value={type}
+                  onChange={(e) => setType(e.target.value)}
+                  className="rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500"
+                >
+                  <option value="sell">بيع</option>
+                  <option value="buy">طلب شراء</option>
+                  <option value="service">خدمة</option>
+                  <option value="request">طلب خدمة</option>
+                  <option value="partnership">شراكة</option>
+                </select>
+
+                <input
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  placeholder="السعر بالدولار"
+                  className="rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500"
+                />
+
+                <select
+                  value={mainCategory}
+                  onChange={(e) => {
+                    setMainCategory(e.target.value);
+                    setSubCategory("");
+                  }}
+                  className="rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500"
+                >
+                  <option value="">اختر القسم الرئيسي</option>
+                  {Object.keys(categories).map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={subCategory}
+                  onChange={(e) => setSubCategory(e.target.value)}
+                  disabled={!mainCategory}
+                  className="rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500 disabled:opacity-50"
+                >
+                  <option value="">اختر القسم الفرعي</option>
+                  {mainCategory &&
+                    categories[mainCategory]?.map((sub) => (
+                      <option key={sub} value={sub}>
+                        {sub}
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="عنوان الإعلان"
+                className="mt-5 w-full rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500"
+              />
+
+              <textarea
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+                placeholder="وصف الإعلان"
+                rows={7}
+                className="mt-5 w-full rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500"
+              />
+
+              <input
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                placeholder="المدينة / الموقع"
+                className="mt-5 w-full rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500"
+              />
+
+              <label className="mt-5 flex items-center gap-3 rounded-2xl bg-slate-50 p-4 font-bold text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={isHidden}
+                  onChange={(e) => setIsHidden(e.target.checked)}
+                  className="h-5 w-5"
+                />
+                إخفاء الإعلان مؤقتًا من السوق
+              </label>
+            </section>
+
+            <section className="rounded-[2rem] bg-white p-6 shadow-xl">
+              <h2 className="mb-2 text-2xl font-black">صور الإعلان</h2>
+              <p className="mb-4 text-sm text-slate-500">
+                يمكنك حذف الصور القديمة أو إضافة صور جديدة.
+              </p>
+
+              {oldImages.length > 0 && (
+                <>
+                  <p className="mb-3 text-sm font-bold text-slate-600">
+                    الصور الحالية
+                  </p>
+
+                  <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
+                    {oldImages.map((img, index) => (
+                      <div
+                        key={index}
+                        className="relative overflow-hidden rounded-2xl border bg-slate-100 shadow-sm"
+                      >
+                        <img
+                          src={img}
+                          alt="صورة الإعلان"
+                          className="h-36 w-full object-cover"
+                        />
+
+                        {index === 0 && (
+                          <span className="absolute right-2 top-2 rounded-full bg-green-500 px-2 py-1 text-xs font-bold text-white">
+                            الرئيسية
+                          </span>
+                        )}
+
+                        <button
+                          type="button"
+                          onClick={() => removeOldImage(index)}
+                          className="absolute left-2 top-2 rounded-lg bg-red-500 px-2 py-1 text-xs font-bold text-white"
+                        >
+                          حذف
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <label className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border-2 border-dashed border-slate-300 bg-slate-50 p-10 text-center transition hover:border-green-500 hover:bg-green-50">
+                <span className="text-5xl">📸</span>
+                <span className="mt-3 text-lg font-black text-slate-800">
+                  إضافة صور جديدة
+                </span>
+                <span className="mt-1 text-sm text-slate-500">
+                  PNG / JPG / WEBP
+                </span>
+
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleNewImages}
+                  className="hidden"
+                />
+              </label>
+
+              {newImages.length > 0 && (
+                <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                  {newImages.map((image, index) => (
+                    <div
+                      key={index}
+                      className="relative overflow-hidden rounded-2xl border bg-slate-100 shadow-sm"
+                    >
+                      <img
+                        src={URL.createObjectURL(image)}
+                        alt="صورة جديدة"
+                        className="h-36 w-full object-cover"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => removeNewImage(index)}
+                        className="absolute left-2 top-2 rounded-lg bg-red-500 px-2 py-1 text-xs font-bold text-white"
+                      >
+                        حذف
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          </div>
+
+          <aside className="space-y-6">
+            <section className="sticky top-24 rounded-[2rem] bg-white p-6 shadow-xl">
+              <h2 className="text-2xl font-black">معاينة الإعلان</h2>
+
+              <div className="mt-5 overflow-hidden rounded-3xl border border-slate-200 bg-slate-50">
+                <div className="flex h-52 items-center justify-center bg-slate-200">
+                  {getMainPreviewImage() ? (
+                    <img
+                      src={getMainPreviewImage()}
+                      alt="معاينة"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span className="text-slate-400">لا توجد صورة</span>
+                  )}
+                </div>
+
+                <div className="p-4">
+                  <p className="text-xs font-bold text-blue-600">
+                    {mainCategory || "القسم"}{" "}
+                    {subCategory ? `— ${subCategory}` : ""}
+                  </p>
+
+                  <h3 className="mt-2 line-clamp-1 text-lg font-black text-slate-900">
+                    {title || "عنوان الإعلان"}
+                  </h3>
+
+                  <p className="mt-2 line-clamp-2 text-sm text-slate-500">
+                    {desc || "وصف الإعلان سيظهر هنا..."}
+                  </p>
+
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-xl font-black text-green-600">
+                      {price ? `$${price}` : "حسب الاتفاق"}
+                    </p>
+
+                    <p className="text-xs font-bold text-slate-400">
+                      📍 {location || "الموقع"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3">
+                <button
+                  onClick={saveChanges}
+                  disabled={saving}
+                  className="w-full rounded-2xl bg-green-500 py-4 font-black text-white hover:bg-green-600 disabled:opacity-60"
+                >
+                  {saving ? "جاري الحفظ..." : "💾 حفظ التعديلات"}
+                </button>
+
+                <button
+                  onClick={() => router.push(`/post/${id}`)}
+                  className="w-full rounded-2xl bg-slate-900 py-4 font-bold text-white hover:bg-slate-800"
+                >
+                  👁 معاينة الإعلان
+                </button>
+
+                <button
+                  onClick={deletePost}
+                  className="w-full rounded-2xl bg-red-500 py-4 font-bold text-white hover:bg-red-600"
+                >
+                  🗑 حذف الإعلان
+                </button>
+              </div>
+            </section>
+          </aside>
+        </div>
       </div>
     </main>
   );
