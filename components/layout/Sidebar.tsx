@@ -208,19 +208,18 @@ const logout = async () => {
                   </Link>
                 </>
               )}
+{isAdmin && !pathname.startsWith("/admin") && (
+  <>
+    <hr className="my-4 border-slate-800" />
 
-              {isAdmin && !pathname.startsWith("/admin") && (
-                <>
-                  <hr className="my-4 border-slate-800" />
-
-                  <Link
-                    href="/admin/posts"
-                    className="block rounded-xl bg-yellow-500 px-4 py-3 font-bold text-black"
-                  >
-                    ⚡ لوحة الإدارة
-                  </Link>
-                </>
-              )}
+    <Link
+      href="/admin"
+      className="block rounded-xl bg-yellow-500 px-4 py-3 font-bold text-black hover:bg-yellow-400 transition"
+    >
+      ⚡ لوحة الإدارة
+    </Link>
+  </>
+)}
             </nav>
           </div>
 
