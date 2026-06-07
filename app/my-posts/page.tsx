@@ -70,14 +70,24 @@ export default function MyPostsPage() {
     return post.isBoosted && post.boostExpiresAt && post.boostExpiresAt > Date.now();
   };
 
-  const formatPrice = (price?: string) => {
-    if (!price) return "حسب الاتفاق";
+  const formatPrice = (price?: string, currency = "IQD") => {
+  if (!price) return "حسب الاتفاق";
 
-    const num = Number(String(price).replace(/[^\d.]/g, ""));
-    if (!num) return "حسب الاتفاق";
+  const num = Number(String(price).replace(/[^\d.]/g, ""));
+  if (!num) return "حسب الاتفاق";
 
-    return `${num.toLocaleString("en-US")} د.ع`;
+  const labels: Record<string, string> = {
+    IQD: "د.ع",
+    SAR: "ر.س",
+    AED: "د.إ",
+    KWD: "د.ك",
+    QAR: "ر.ق",
+    BHD: "د.ب",
+    OMR: "ر.ع",
   };
+
+  return `${num.toLocaleString("en-US")} ${labels[currency] || currency}`;
+};
 
   const formatDate = (value?: number) => {
     if (!value) return "غير معروف";
@@ -315,7 +325,7 @@ export default function MyPostsPage() {
 
                     <div className="mt-4">
                       <p className="text-3xl font-black text-green-600">
-                        {formatPrice(post.price)}
+                        {formatPrice(post.price, post.currency || "IQD")}
                       </p>
 
                       <p className="mt-2 text-sm font-bold text-slate-400">
