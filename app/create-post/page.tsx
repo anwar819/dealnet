@@ -27,6 +27,8 @@ export default function CreatePostPage() {
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [price, setPrice] = useState("");
+  const [country, setCountry] = useState("IQ");
+const [currency, setCurrency] = useState("IQD");
   const [location, setLocation] = useState("");
   const [images, setImages] = useState<File[]>([]);
 
@@ -287,6 +289,8 @@ export default function CreatePostPage() {
         type,
         mainCategory,
         subCategory,
+        country,
+        currency,
         category: mainCategory,
         title: title.trim(),
         desc: desc.trim(),
@@ -435,7 +439,7 @@ export default function CreatePostPage() {
 
             <section className="rounded-[2rem] bg-white p-6 shadow-xl">
               <h2 className="mb-6 text-2xl font-black">بيانات الإعلان</h2>
-
+               
               <div className="grid gap-5 md:grid-cols-2">
                 <select value={type} onChange={(e) => setType(e.target.value)} className="rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500">
                   <option value="sell">بيع</option>
@@ -445,8 +449,20 @@ export default function CreatePostPage() {
                   <option value="partnership">شراكة</option>
                 </select>
 
-                <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="السعر بالدولار" className="rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500" />
-
+                <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="السعر بالدينار العراقي" className="rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500" />
+                  <select
+  value={currency}
+  onChange={(e) => setCurrency(e.target.value)}
+  className="rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500"
+>
+  <option value="IQD">🇮🇶 دينار عراقي (IQD)</option>
+  <option value="SAR">🇸🇦 ريال سعودي (SAR)</option>
+  <option value="AED">🇦🇪 درهم إماراتي (AED)</option>
+  <option value="KWD">🇰🇼 دينار كويتي (KWD)</option>
+  <option value="QAR">🇶🇦 ريال قطري (QAR)</option>
+  <option value="BHD">🇧🇭 دينار بحريني (BHD)</option>
+  <option value="OMR">🇴🇲 ريال عماني (OMR)</option>
+</select>
                 <select
                   value={mainCategory}
                   onChange={(e) => {
@@ -571,8 +587,9 @@ export default function CreatePostPage() {
 
                   <div className="mt-4 flex items-center justify-between">
                     <p className="text-xl font-black text-green-600">
-                      {price ? `$${price}` : "حسب الاتفاق"}
-                    </p>
+{price
+  ? `${Number(price).toLocaleString("en-US")} ${currency}`
+  : "حسب الاتفاق"}                    </p>
                     <p className="text-xs font-bold text-slate-400">
                       📍 {location || "الموقع"}
                     </p>

@@ -27,7 +27,8 @@ export default function EditPostPage() {
   const [desc, setDesc] = useState("");
   const [price, setPrice] = useState("");
   const [location, setLocation] = useState("");
-
+  const [country, setCountry] = useState("IQ");
+const [currency, setCurrency] = useState("IQD");
   const [oldImages, setOldImages] = useState<string[]>([]);
   const [newImages, setNewImages] = useState<File[]>([]);
   const [isHidden, setIsHidden] = useState(false);
@@ -66,7 +67,7 @@ export default function EditPostPage() {
         .select("*")
         .eq("id", user.id)
         .single();
-
+        
       if (profile?.isBlocked) {
         alert("🚫 تم حظر حسابك");
         router.push("/");
@@ -109,6 +110,8 @@ export default function EditPostPage() {
       setDesc(data.description || data.desc || "");
       setPrice(data.price || "");
       setLocation(data.location || data.city || "");
+      setCountry(data.country || "IQ");
+      setCurrency(data.currency || "IQD");
       setIsHidden(data.isHidden === true);
 
       const imgs =
@@ -200,6 +203,8 @@ export default function EditPostPage() {
           type,
           mainCategory,
           subCategory,
+          country,
+          currency,
           category: mainCategory,
           title: title.trim(),
           desc: desc.trim(),
@@ -331,10 +336,22 @@ export default function EditPostPage() {
                 <input
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
-                  placeholder="السعر بالدولار"
+                  placeholder="السعر بالدينار العراقي - مثال: 1000000"
                   className="rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500"
                 />
-
+                <select
+  value={currency}
+  onChange={(e) => setCurrency(e.target.value)}
+  className="rounded-2xl border border-slate-300 bg-slate-50 p-4 outline-none focus:border-green-500"
+>
+  <option value="IQD">🇮🇶 دينار عراقي (IQD)</option>
+  <option value="SAR">🇸🇦 ريال سعودي (SAR)</option>
+  <option value="AED">🇦🇪 درهم إماراتي (AED)</option>
+  <option value="KWD">🇰🇼 دينار كويتي (KWD)</option>
+  <option value="QAR">🇶🇦 ريال قطري (QAR)</option>
+  <option value="BHD">🇧🇭 دينار بحريني (BHD)</option>
+  <option value="OMR">🇴🇲 ريال عماني (OMR)</option>
+</select>
                 <select
                   value={mainCategory}
                   onChange={(e) => {
@@ -521,7 +538,9 @@ export default function EditPostPage() {
 
                   <div className="mt-4 flex items-center justify-between">
                     <p className="text-xl font-black text-green-600">
-                      {price ? `$${price}` : "حسب الاتفاق"}
+                      {price
+  ? `${Number(price).toLocaleString("en-US")} ${currency}`
+  : "حسب الاتفاق"}
                     </p>
 
                     <p className="text-xs font-bold text-slate-400">

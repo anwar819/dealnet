@@ -408,10 +408,11 @@ export default function PostDetailsPage() {
             <div className="rounded-[2rem] bg-white p-6 shadow">
               <p className="text-5xl font-black text-green-600">
   {post.price
-    ? `${Number(post.price).toLocaleString("en-US")} د.ع`
+    ? `${Number(
+        String(post.price).replace(/[^\d.]/g, "")
+      ).toLocaleString("en-US")} د.ع`
     : "حسب الاتفاق"}
 </p>
-
               {post.phone && (
                 <div className="mt-4 rounded-2xl bg-slate-100 p-4 text-center font-bold text-slate-700">
                   📞 {post.phone}

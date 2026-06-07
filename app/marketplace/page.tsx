@@ -10,6 +10,8 @@ type PostType = {
   description?: string;
   price?: string;
   location?: string;
+  country?: string;
+  currency?: string;
   city?: string;
   userId?: string;
   userName?: string;
@@ -226,6 +228,24 @@ export default function MarketplacePage() {
     const clean = price.replace(/[^\d.]/g, "");
     return Number(clean) || 0;
   };
+  const formatPrice = (price?: string, currency = "IQD") => {
+  if (!price) return "حسب الاتفاق";
+
+  const num = Number(String(price).replace(/[^\d.]/g, ""));
+  if (!num) return "حسب الاتفاق";
+
+  const labels: Record<string, string> = {
+    IQD: "د.ع",
+    SAR: "ر.س",
+    AED: "د.إ",
+    KWD: "د.ك",
+    QAR: "ر.ق",
+    BHD: "د.ب",
+    OMR: "ر.ع",
+  };
+
+  return `${num.toLocaleString("en-US")} ${labels[currency] || currency}`;
+};
 
   const isFavorite = (postId: string) => {
     return favorites.some((fav) => fav.postId === postId);
@@ -727,9 +747,7 @@ export default function MarketplacePage() {
 
                     <div className="mt-4 flex items-center justify-between gap-3">
                       <p className="truncate text-xl font-black text-green-600">
-{post.price
-  ? `${Number(String(post.price).replace(/[^\d.]/g, "")).toLocaleString("en-US")} د.ع`
-  : "حسب الاتفاق"}                      </p>
+{formatPrice(post.price, post.currency || "IQD")}                     </p>
 
                       <p className="truncate text-xs font-bold text-slate-400">
                         📍 {post.location || post.city || "غير محدد"}
