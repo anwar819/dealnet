@@ -7,9 +7,9 @@ import { supabase } from "../../lib/supabase";
 export default function MyPostsPage() {
   const router = useRouter();
 
-  const [userId, setUserId] = useState("");
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     checkUserAndLoadPosts();
@@ -25,7 +25,6 @@ export default function MyPostsPage() {
       return;
     }
 
-    setUserId(user.id);
     await loadPosts(user.id);
   };
 
@@ -67,6 +66,32 @@ export default function MyPostsPage() {
     return "";
   };
 
+  const isBoosted = (post: any) => {
+    return post.isBoosted && post.boostExpiresAt && post.boostExpiresAt > Date.now();
+  };
+
+  const formatPrice = (price?: string) => {
+    if (!price) return "حسب الاتفاق";
+
+    const num = Number(String(price).replace(/[^\d.]/g, ""));
+    if (!num) return "حسب الاتفاق";
+
+    return `${num.toLocaleString("en-US")} د.ع`;
+  };
+
+  const formatDate = (value?: number) => {
+    if (!value) return "غير معروف";
+
+    const diff = Date.now() - value;
+    const day = 24 * 60 * 60 * 1000;
+
+    if (diff < day) return "اليوم";
+    if (diff < day * 2) return "أمس";
+    if (diff < day * 7) return `منذ ${Math.floor(diff / day)} أيام`;
+
+    return new Date(value).toLocaleDateString("ar-IQ");
+  };
+
   const deletePost = async (id: string) => {
     if (!confirm("هل أنت متأكد من حذف الإعلان؟")) return;
 
@@ -99,14 +124,10 @@ export default function MyPostsPage() {
     }
 
     setPosts((prev) =>
-      prev.map((p) =>
-        p.id === post.id ? { ...p, isHidden: nextValue } : p
-      )
+      prev.map((p) => (p.id === post.id ? { ...p, isHidden: nextValue } : p))
     );
-  };
 
-  const isBoosted = (post: any) => {
-    return post.isBoosted && post.boostExpiresAt && post.boostExpiresAt > Date.now();
+    setOpenMenuId(null);
   };
 
   if (loading) {
@@ -130,7 +151,7 @@ export default function MyPostsPage() {
               <h1 className="text-4xl font-black">📦 إعلاناتي</h1>
 
               <p className="mt-3 text-slate-300">
-                إدارة إعلاناتك، تعديلها، إخفاؤها أو طلب ترويجها من مكان واحد.
+                إدارة إعلاناتك بدون إزعاج، مع عرض واضح للإعلان أولاً.
               </p>
             </div>
 
@@ -187,19 +208,20 @@ export default function MyPostsPage() {
             {posts.map((post) => {
               const image = getMainImage(post);
               const boosted = isBoosted(post);
+              const menuOpen = openMenuId === post.id;
 
               return (
                 <article
                   key={post.id}
-                  className={`overflow-hidden rounded-[2rem] border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl ${
+                  className={`relative overflow-hidden rounded-[2rem] border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-xl ${
                     post.isHidden
-                      ? "border-red-200 opacity-75"
+                      ? "border-red-200 opacity-80"
                       : boosted
                       ? "border-orange-400 ring-2 ring-orange-200"
                       : "border-slate-200"
                   }`}
                 >
-                  <div className="relative h-56 bg-slate-200">
+                  <div className="relative h-60 bg-slate-200">
                     {image ? (
                       <img
                         src={image}
@@ -229,6 +251,45 @@ export default function MyPostsPage() {
                         </span>
                       )}
                     </div>
+
+                    <button
+                      onClick={() => setOpenMenuId(menuOpen ? null : post.id)}
+                      className="absolute left-3 top-3 flex h-10 w-10 items-center justify-center rounded-full bg-white text-xl font-black text-slate-900 shadow hover:bg-slate-100"
+                    >
+                      ⋮
+                    </button>
+
+                    {menuOpen && (
+                      <div className="absolute left-3 top-16 z-20 w-44 overflow-hidden rounded-2xl bg-white text-sm font-bold shadow-xl">
+                        <button
+                          onClick={() => router.push(`/edit/${post.id}`)}
+                          className="block w-full px-4 py-3 text-right hover:bg-slate-100"
+                        >
+                          ✏ تعديل
+                        </button>
+
+                        <button
+                          onClick={() => router.push(`/boost/${post.id}`)}
+                          className="block w-full px-4 py-3 text-right hover:bg-slate-100"
+                        >
+                          🔥 ترويج
+                        </button>
+
+                        <button
+                          onClick={() => toggleHidden(post)}
+                          className="block w-full px-4 py-3 text-right hover:bg-slate-100"
+                        >
+                          {post.isHidden ? "👁 إظهار" : "🙈 إخفاء"}
+                        </button>
+
+                        <button
+                          onClick={() => deletePost(post.id)}
+                          className="block w-full px-4 py-3 text-right text-red-600 hover:bg-red-50"
+                        >
+                          🗑 حذف
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="p-5">
@@ -252,60 +313,27 @@ export default function MyPostsPage() {
                       {post.description || post.desc || "لا يوجد وصف"}
                     </p>
 
-                    <div className="mt-4 flex items-center justify-between gap-3">
-                      <p className="text-2xl font-black text-green-600">
-                        {post.price ? `$${post.price}` : "حسب الاتفاق"}
+                    <div className="mt-4">
+                      <p className="text-3xl font-black text-green-600">
+                        {formatPrice(post.price)}
                       </p>
 
-                      <p className="text-xs font-bold text-slate-400">
+                      <p className="mt-2 text-sm font-bold text-slate-400">
                         📍 {post.location || post.city || "غير محدد"}
                       </p>
                     </div>
 
-                    <div className="mt-4 flex items-center justify-between rounded-2xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
+                    <div className="mt-4 grid grid-cols-3 gap-2 rounded-2xl bg-slate-50 px-3 py-3 text-center text-xs font-bold text-slate-500">
                       <span>👁 {post.views || 0}</span>
                       <span>❤️ {post.favoriteCount || 0}</span>
-                    </div>
-
-                    <div className="mt-5 grid grid-cols-2 gap-2">
-                      <button
-                        onClick={() => router.push(`/post/${post.id}`)}
-                        className="rounded-xl bg-slate-950 py-3 text-sm font-bold text-white hover:bg-slate-800"
-                      >
-                        عرض
-                      </button>
-
-                      <button
-                        onClick={() => router.push(`/edit/${post.id}`)}
-                        className="rounded-xl bg-blue-500 py-3 text-sm font-bold text-white hover:bg-blue-600"
-                      >
-                        تعديل
-                      </button>
-
-                      <button
-                        onClick={() => router.push(`/boost/${post.id}`)}
-                        className="rounded-xl bg-orange-500 py-3 text-sm font-bold text-white hover:bg-orange-600"
-                      >
-                        🔥 ترويج
-                      </button>
-
-                      <button
-                        onClick={() => toggleHidden(post)}
-                        className={`rounded-xl py-3 text-sm font-bold text-white ${
-                          post.isHidden
-                            ? "bg-green-500 hover:bg-green-600"
-                            : "bg-slate-600 hover:bg-slate-700"
-                        }`}
-                      >
-                        {post.isHidden ? "إظهار" : "إخفاء"}
-                      </button>
+                      <span>📅 {formatDate(post.createdAt)}</span>
                     </div>
 
                     <button
-                      onClick={() => deletePost(post.id)}
-                      className="mt-3 w-full rounded-xl bg-red-500 py-3 text-sm font-bold text-white hover:bg-red-600"
+                      onClick={() => router.push(`/post/${post.id}`)}
+                      className="mt-5 w-full rounded-2xl bg-slate-950 py-4 text-sm font-black text-white hover:bg-green-600"
                     >
-                      حذف الإعلان
+                      عرض التفاصيل
                     </button>
                   </div>
                 </article>
