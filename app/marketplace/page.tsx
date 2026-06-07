@@ -727,8 +727,9 @@ export default function MarketplacePage() {
 
                     <div className="mt-4 flex items-center justify-between gap-3">
                       <p className="truncate text-xl font-black text-green-600">
-                        {post.price ? `$${post.price}` : "حسب الاتفاق"}
-                      </p>
+{post.price
+  ? `${Number(String(post.price).replace(/[^\d.]/g, "")).toLocaleString("en-US")} د.ع`
+  : "حسب الاتفاق"}                      </p>
 
                       <p className="truncate text-xs font-bold text-slate-400">
                         📍 {post.location || post.city || "غير محدد"}

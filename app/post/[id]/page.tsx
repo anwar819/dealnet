@@ -324,7 +324,7 @@ export default function PostDetailsPage() {
   return (
     <main className="min-h-screen bg-slate-100 p-4 md:p-6">
       <div className="mx-auto max-w-7xl space-y-6">
-        <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-xl">
+       <section className="rounded-[2rem] bg-slate-950 p-4 text-white shadow-xl">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="mb-2 text-sm font-black text-green-400">
@@ -368,7 +368,7 @@ export default function PostDetailsPage() {
         <section className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <div className="overflow-hidden rounded-[2rem] bg-white p-4 shadow">
-              <div className="flex h-[480px] items-center justify-center overflow-hidden rounded-3xl bg-slate-200">
+              <div className="flex h-[420px] items-center justify-center overflow-hidden rounded-3xl bg-slate-200">
                 {mainImage ? (
                   <img
                     src={mainImage}
@@ -406,9 +406,11 @@ export default function PostDetailsPage() {
 
           <aside className="space-y-4">
             <div className="rounded-[2rem] bg-white p-6 shadow">
-              <p className="text-4xl font-black text-green-600">
-                {post.price ? `$${post.price}` : "حسب الاتفاق"}
-              </p>
+              <p className="text-5xl font-black text-green-600">
+  {post.price
+    ? `${Number(post.price).toLocaleString("en-US")} د.ع`
+    : "حسب الاتفاق"}
+</p>
 
               {post.phone && (
                 <div className="mt-4 rounded-2xl bg-slate-100 p-4 text-center font-bold text-slate-700">
@@ -498,41 +500,49 @@ export default function PostDetailsPage() {
                   {isFavorite ? "❤️ محفوظ في المفضلة" : "♡ إضافة للمفضلة"}
                 </button>
 
-                <button
-                  onClick={copyLink}
-                  className="w-full rounded-2xl bg-slate-700 py-4 font-bold text-white hover:bg-slate-800"
-                >
-                  🔗 نسخ رابط الإعلان
-                </button>
-
-                <button
-                  onClick={() => router.push(`/report/${post.id}`)}
-                  className="w-full rounded-2xl bg-red-500 py-4 font-bold text-white hover:bg-red-600"
-                >
-                  🚨 إبلاغ عن الإعلان
-                </button>
+              
               </div>
             </div>
+<div className="rounded-[2rem] bg-white p-6 shadow">
+  <div className="grid gap-3">
+    <button
+      onClick={copyLink}
+      className="w-full rounded-2xl bg-slate-700 py-4 font-bold text-white"
+    >
+      🔗 نسخ رابط الإعلان
+    </button>
 
-            {userId === post.userId && (
-              <div className="rounded-[2rem] bg-white p-6 shadow">
-                <div className="grid gap-3">
-                  <button
-                    onClick={() => router.push(`/boost/${post.id}`)}
-                    className="w-full rounded-2xl bg-orange-500 py-4 font-bold text-white hover:bg-orange-600"
-                  >
-                    🔥 طلب ترويج
-                  </button>
+    <button
+      onClick={() => router.push(`/report/${post.id}`)}
+      className="w-full rounded-2xl bg-red-500 py-4 font-bold text-white"
+    >
+      🚨 إبلاغ عن الإعلان
+    </button>
+  </div>
+</div>
+{userId === post.userId && (
+  <div className="rounded-[2rem] bg-white p-5 shadow">
+    <h3 className="mb-4 text-lg font-black text-slate-900">
+      إدارة إعلانك
+    </h3>
 
-                  <button
-                    onClick={() => router.push(`/edit/${post.id}`)}
-                    className="w-full rounded-2xl bg-slate-900 py-4 font-bold text-white hover:bg-slate-800"
-                  >
-                    تعديل الإعلان
-                  </button>
-                </div>
-              </div>
-            )}
+    <div className="grid grid-cols-2 gap-3">
+      <button
+        onClick={() => router.push(`/edit/${post.id}`)}
+        className="rounded-2xl bg-slate-900 py-3 text-sm font-bold text-white hover:bg-slate-800"
+      >
+        ✏️ تعديل
+      </button>
+
+      <button
+        onClick={() => router.push(`/boost/${post.id}`)}
+        className="rounded-2xl bg-orange-500 py-3 text-sm font-bold text-white hover:bg-orange-600"
+      >
+        🔥 ترويج
+      </button>
+    </div>
+  </div>
+)}
           </aside>
         </section>
 
