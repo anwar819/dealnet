@@ -299,7 +299,24 @@ export default function PostDetailsPage() {
     if (!value) return "غير معروف";
     return new Date(value).toLocaleDateString("ar-IQ");
   };
+ const formatPrice = (price?: string, currency = "IQD") => {
+  if (!price) return "حسب الاتفاق";
 
+  const num = Number(String(price).replace(/[^\d.]/g, ""));
+  if (!num) return "حسب الاتفاق";
+
+  const labels: Record<string, string> = {
+    IQD: "د.ع",
+    SAR: "ر.س",
+    AED: "د.إ",
+    KWD: "د.ك",
+    QAR: "ر.ق",
+    BHD: "د.ب",
+    OMR: "ر.ع",
+  };
+
+  return `${num.toLocaleString("en-US")} ${labels[currency] || currency}`;
+};
   const isBoosted =
     post?.isBoosted && post?.boostExpiresAt && post.boostExpiresAt > Date.now();
 
@@ -407,11 +424,7 @@ export default function PostDetailsPage() {
           <aside className="space-y-4">
             <div className="rounded-[2rem] bg-white p-6 shadow">
               <p className="text-5xl font-black text-green-600">
-  {post.price
-    ? `${Number(
-        String(post.price).replace(/[^\d.]/g, "")
-      ).toLocaleString("en-US")} د.ع`
-    : "حسب الاتفاق"}
+  {formatPrice(post.price, post.currency || "IQD")}
 </p>
               {post.phone && (
                 <div className="mt-4 rounded-2xl bg-slate-100 p-4 text-center font-bold text-slate-700">
