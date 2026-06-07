@@ -599,7 +599,7 @@ export default function MarketplacePage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {filteredPosts.map((post) => {
               const mainImage = getMainImage(post);
               const fav = isFavorite(post.id);
@@ -619,7 +619,7 @@ export default function MarketplacePage() {
                       : "border-slate-200"
                   }`}
                 >
-                  <div className="relative h-56 overflow-hidden bg-slate-200">
+                  <div className="relative h-48 overflow-hidden bg-slate-200">
                     {mainImage ? (
                       <img
                         src={mainImage}
